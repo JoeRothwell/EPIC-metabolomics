@@ -71,11 +71,13 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
   if(pos == T) {  
     ion.mode <- "Pos"
     meta$baseline <- baselines$pos.bl
-    pt <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    #pt <- pt[CSmatchpos, ]
       } else { 
     ion.mode <- "Neg"
     meta$baseline <- baselines$neg.bl
-    pt <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    #pt <- pt[CSmatchneg, ]
   }
 
   #use sampvec to get 451 subjects only
@@ -95,7 +97,6 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
   ### Read and process metadata ------------------------------------------------------------
 
   #subset samples only
-  #labs <- meta[meta$present == T, ]
   labs <- meta[meta$present.pos == T & meta$stype == "SA", ]
 
   #Create food intake object, get quartiles and define intake categories
@@ -105,9 +106,10 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 
   qmeds <- aggregate(mat, list(classes=cats), median)
   #get features which increase by cof cons quartile (with conditions)
-  increasing <- function(x) { which.max(x) == 4 &     #highest must be quartile 4
-      (which.min(x) == 1 | which.min(x) == 2) &       #lowest must be Q1 or Q2
-      x[3] > x[1] }                                   #Q3 must be greater than Q1
+  increasing <- 
+      function(x) { which.max(x) == 4 &                         # highest must be quartile 4
+                   (which.min(x) == 1 | which.min(x) == 2) &    # lowest must be Q1 or Q2
+                    x[3] > x[1] }                               # Q3 must be greater than Q1
 
   ind <- apply(as.matrix(qmeds[, -1]), 2, increasing)
 
@@ -116,12 +118,12 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 
   #impute missings with half minimum value
   library(zoo)
-  filtmat <- if(impute == T) na.aggregate(filtmat, FUN = function(x) median(x)/2 )
-
+  if(impute == T) filtmat <- na.aggregate(filtmat, FUN = function(x) median(x)/2 )
+  
   #subset increasing only and log transform
   logmat <- log(filtmat)
   print(paste("Testing", ncol(logmat), "features..."))
-
+  
   ### Correlation and partial correlation ###-------------------------
 
   #correlation test food intake with intensities of selected features
@@ -149,8 +151,8 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
     yres <- residuals(lm(x[x > 0] ~ centre + sex + R_BMI + smoke + type.plate + baseline, data = labs[x > 0, ]))
   
     #association with alcohol intake
-    #xres <- residuals(lm(logQe_Alc ~ country + sex + R_BMI + logcof + smoke, data = labs[x > 0, ]))
-    #yres <- residuals(lm(x[x > 0]  ~ country + sex + R_BMI + logcof + smoke + type.plate + baseline, data = labs[x > 0, ]))
+    #res <- residuals(lm(logQe_Alc ~ country + sex + R_BMI + logcof + smoke, data = labs[x > 0, ]))
+    #res <- residuals(lm(x[x > 0]  ~ country + sex + R_BMI + logcof + smoke + type.plate + baseline, data = labs[x > 0, ]))
     #print(mod$call)
     
     #print(paste("Subset size = ", length(xres)))
@@ -159,9 +161,7 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
   }
 
   #apply function across matrix and extract p-values
-  
   lpcor <- apply(logmat, 2, partialcor)
-  
   Pcor  <- unlist(sapply(lpcor, "[", 4))
   pval  <- p.adjust(unlist(sapply(lpcor, "[", 3)), method = "BH")
   
@@ -196,19 +196,19 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 ### Coffee and alcohol analyses --------------------------------------------------------------------
 
 #1 Coffee, filter increasing, filter not present in three quarters of all samples (n=340)
-disctbl.pos1 <- intake.corr("logcof", incr = F, pcutoff = 0.05)
-disctbl.neg1 <- intake.corr("logcof", incr = F, pos = F, pcutoff = 0.05)
+cofpos <- intake.corr("logcof", incr = T, pcutoff = 0.05)
+cofneg <- intake.corr("logcof", incr = T, pos = F, pcutoff = 0.05)
 
 # Coffee, cups, not increasing (for Manhattan set incr to F and pcutoff to 1)
-disctbl.pos <- intake.corr("cups", incr = F, impute = F, pcutoff = 1)
-disctbl.neg <- intake.corr("cups", incr = F, pos = F, pcutoff = 1)
-disc.cof    <- disctbl.pos %>% bind_rows(disctbl.neg) %>% arrange(-Pcor)
+cofpos <- intake.corr("cups", incr = F, impute = F, pcutoff = 1)
+cofneg <- intake.corr("cups", incr = F, pos = F, pcutoff = 1)
+cof    <- cofpos %>% bind_rows(cofneg) %>% arrange(-Pcor)
 #saveRDS(disc.cof, file="Coffee features Manhattan.rds")
 
 #2. Alcohol grams consumed, no increasing filter, missings not imputed:
-disc.alc.pos <- intake.corr("logQe_Alc", pos = T, incr = F, impute = F, min.sample = 225, pcutoff = 1)
-disc.alc.neg <- intake.corr("logQe_Alc", pos = F, incr = F, impute = F, min.sample = 225, pcutoff = 1)
-alc.all.ss   <- disc.alc.pos %>% bind_rows(disc.alc.neg) %>% arrange(-Pcor)
+alcpos <- intake.corr("logQe_Alc", pos = T, incr = F, impute = F, min.sample = 225, pcutoff = 0.05)
+alcneg <- intake.corr("logQe_Alc", pos = F, incr = F, impute = F, min.sample = 225, pcutoff = 0.05)
+alc   <- alcpos %>% bind_rows(alcneg) %>% arrange(-Pcor)
 
 ### Correlation heatmap ----------------------------------------------------------------------
 
@@ -220,7 +220,7 @@ ptpos <- ptpos[, sampvec ]
 ptneg <- ptneg[, sampvec ]
 
 #merge pos and neg data
-disctbl <- rbind(disctbl.pos1, disctbl.neg1)
+disctbl <- rbind(cofpos, cofneg)
 saveRDS(disctble, file="coffee_corr_features.rds")
 
 posfilt <- rowSums(ptpos > 1) > 340 #gives logical vector 
@@ -229,14 +229,14 @@ posmat <- ptpos[ posfilt, ]
 negmat <- ptneg[ negfilt, ]
 
 #subset by discriminant feature number
-discmatpos <- posmat[ disctbl.pos1$feat,  ] %>% t
-discmatneg <- negmat[ disctbl.neg1$feat,  ] %>% t
+discmatpos <- posmat[ cofpos1$feat,  ] %>% t
+discmatneg <- negmat[ cofneg1$feat,  ] %>% t
 
 discmat <- cbind(discmatpos, discmatneg)
 
 #filter the original peak table (for extraction of feature data)
-ptpos <- ptpos[disctbl.pos1$feat, ]
-ptneg <- ptneg[disctbl.neg1$feat, ]
+ptpos <- ptpos[cofpos1$feat, ]
+ptneg <- ptneg[cofneg1$feat, ]
 
 #log2 transform data and make colnames
 logmat   <- log2(discmat)
