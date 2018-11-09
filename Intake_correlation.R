@@ -2,6 +2,8 @@
 # Coffee QGE130301; Red meat QGE0701; Fish QGE0801; Fruits, nuts and seeds QGE04; Alc beverages QGE14;
 # Beer 140301; Total dietary fibre QEFIBT
 
+# Indices for match to 
+
 ### Function for baseline correction -------------------------------------------------------------------
 baselines <- function(x) {
   
@@ -47,16 +49,17 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
-  baselines <- readRDS("baselines pos neg.rds")
+  baselines <- readRDS("prepdata/baselines pos neg.rds")
 
   ### Define and process sample metadata (food, lifestyle, technical) ###
   #Get alcohol (g) and BMI data
   alc_g <- read.csv("alcohol/alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI)
 
   # Read in main metadata, add alcohol and BMI data and log transformed intakes
-  meta  <- read.csv("cs_metadata.csv") %>% left_join(alc_g, by="Idepic") %>%
-    mutate(logcof = log(cof + 1), logalc = log(alcbev + 1), logredmeat = log(redmeat + 1),
-         logprocmeat = log(procmeat + 1), logfish = log(fish + 1), logQe_Alc = log(Qe_Alc + 1))
+  meta  <- read.csv("data/cs_metadata.csv") %>% 
+           left_join(alc_g, by="Idepic") %>%
+           mutate(logcof = log(cof + 1), logalc = log(alcbev + 1), logredmeat = log(redmeat + 1),
+           logprocmeat = log(procmeat + 1), logfish = log(fish + 1), logQe_Alc = log(Qe_Alc + 1))
 
   #add cup volumes in ml: France, 146.59; Italy, 55.2; Greece, 135.48; Germany, 209.32
   cupvols <- data.frame(country = levels(meta$country), cupvol = c(146.59, 209.32, 135.48, 55.2))
@@ -213,8 +216,8 @@ alc   <- alcpos %>% bind_rows(alcneg) %>% arrange(-Pcor)
 ### Correlation heatmap ----------------------------------------------------------------------
 
 ### Read in feature tables ###
-ptpos <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-ptneg <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
 
 ptpos <- ptpos[, sampvec ]
 ptneg <- ptneg[, sampvec ]

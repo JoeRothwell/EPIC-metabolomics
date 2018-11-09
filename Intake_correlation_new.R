@@ -1,4 +1,4 @@
-test <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T){
+intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T){
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
@@ -21,12 +21,12 @@ test <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, mi
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
     pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-    #pt <- pt[CSmatchpos, ]
+    pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
     pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-    #pt <- pt[CSmatchneg, ]
+    pt <- pt[CSmatchneg, ]
   }
   
   #use sampvec to get 451 subjects only
@@ -146,17 +146,17 @@ test <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, mi
 }
 
 # Coffee
-disctblp <- test()
-disctbln <- test(pos = F)
+disctblp <- intakecor()
+disctbln <- intakecor(pos = F)
 
 # Alcohol
-dictbl2p <- test(food = "Qe_Alc", incr = F)
-dictbl2n <- test(food = "Qe_Alc", incr = F, pos = F)
+dictbl2p <- intakecor(food = "Qe_Alc", incr = F)
+dictbl2n <- intakecor(food = "Qe_Alc", incr = F, pos = F)
 
 # Filtered by CS/HCC matching
-dictbl3p <- test(food = "Qe_Alc", incr = F)
-dictbl3n <- test(food = "Qe_Alc", incr = F, pos = F)
+dictbl3p <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250)
+dictbl3n <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250)
 
 # Coffee matrix only
-logmat <- test(incr = F, impute = T, model = F)
+logmat <- intakecor(incr = F, impute = T, model = F)
 scalemat <- scale(logmat)
