@@ -146,16 +146,16 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
 }
 
 # Coffee
-disctblp <- intakecor()
-disctbln <- intakecor(pos = F)
+cofpos <- intakecor()
+cofneg <- intakecor(pos = F)
 
 # Alcohol
-dictbl2p <- intakecor(food = "Qe_Alc", incr = F)
-dictbl2n <- intakecor(food = "Qe_Alc", incr = F, pos = F)
+alcpos <- intakecor(food = "Qe_Alc", incr = F)
+alcneg <- intakecor(food = "Qe_Alc", incr = F, pos = F)
 
 # Filtered by CS/HCC matching
-dictbl3p <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250)
-dictbl3n <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250)
+alcpos1 <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250)
+alcneg1 <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250)
 
 # Coffee matrix only
 logmat <- intakecor(incr = F, impute = T, model = F)
