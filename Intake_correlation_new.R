@@ -1,3 +1,48 @@
+# Finds features associated with food intake by partial correlation
+# Coffee QGE130301; Red meat QGE0701; Fish QGE0801; Fruits, nuts and seeds QGE04; Alc beverages QGE14;
+# Beer 140301; Total dietary fibre QEFIBT
+
+# Function for baseline correction
+baselines <- function(x) {
+  
+  #calculation of raw and corrected peaks for new data 4-4-2017
+  #after raw data check, pos mode@ 357 is classified as raw, 204 is corr
+  
+  #use old data colnames to determine baseline heights (high/low) for each sample
+  # get colnames from feature tables
+  
+  library(tidyverse)
+  posname <- read_csv("Old/EPIC RP POS Corrected final peak table into MPP.csv") %>% colnames
+  negname <- read_tsv("Old/EPIC serum RP NEG corrected.txt", skip=4) %>% colnames
+  
+  library(stringr)
+  # get neg sample numbers and their baseline levels #data_frame doesn't convert to factor
+  sampno <- negname %>% str_match_all("[0-9]+") %>% unlist %>% as.numeric
+  negbl <- negname %>% str_match("corr|raw")
+  negdf  <- data_frame(sampno, negbl = negbl[-1])
+  
+  #data frame of positive baseline levels
+  sampno <- posname %>% str_match_all("[0-9]+") %>% unlist %>% as.numeric
+  posbl <- posname %>% str_match("corr|raw")
+  posdf  <- data_frame(sampno, posbl = posbl[-(1:5)])
+  
+  bl <- merge(negdf, posdf, by="sampno", all.x = T)
+  
+  which(is.na(bl$posbl))
+  bl$posbl[c(204, 355)] <- c("corr", "raw")
+  
+  #insert NAs into baseline cols and subset
+  bl <- read_csv("cs_metadata.csv") %>% bind_cols(bl) %>% 
+    mutate(pos.bl = if_else(stype == "SA", posbl, country)) %>%
+    mutate(neg.bl = if_else(stype == "SA", negbl, country)) %>%
+    select(pos.bl, neg.bl)
+  #return(bl)
+  # saveRDS(bl, "baselines pos neg.rds")
+}
+bl <- baselines()
+
+# ----
+
 intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T){
   
   require(tidyverse)
@@ -21,12 +66,12 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
     pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-    pt <- pt[CSmatchpos, ]
+    #pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
     pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-    pt <- pt[CSmatchneg, ]
+    #pt <- pt[CSmatchneg, ]
   }
   
   #use sampvec to get 451 subjects only
@@ -145,9 +190,9 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
 
 }
 
-# Coffee
-cofpos <- intakecor()
-cofneg <- intakecor(pos = F)
+# Coffee. Set pcutoff = 1 for Manhattan
+cofpos <- intakecor(incr = T, pos = T, pcutoff = 0.05)
+cofneg <- intakecor(incr = T, pos = F, pcutoff = 0.05)
 
 # Alcohol
 alcpos <- intakecor(food = "Qe_Alc", incr = F)
@@ -160,3 +205,99 @@ alcneg1 <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250)
 # Coffee matrix only
 logmat <- intakecor(incr = F, impute = T, model = F)
 scalemat <- scale(logmat)
+
+# Correlation heatmap ----
+
+corrdata <- function(posdisc, negdisc) {
+  ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+  ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+  meta  <- read.csv("data/cs_metadata.csv")
+  
+  # Subset samples and features by filtering
+  samples <- meta$present.pos == T & meta$stype == "SA" 
+  posfilt <- rowSums(ptpos > 1) > 340
+  negfilt <- rowSums(ptneg > 1) > 340
+  ptpos <- ptpos[posfilt, samples ]
+  ptneg <- ptneg[negfilt, samples ]
+  
+  # merge pos and neg data
+  disctbl <- rbind(posdisc, negdisc)
+  # saveRDS(disctbl, file="coffee_corr_features.rds")
+  
+  #subset by discriminant feature number
+  discmatpos <- ptpos[ posdisc$feat,  ] %>% t
+  discmatneg <- ptneg[ negdisc$feat,  ] %>% t
+  
+  discmat <- cbind(discmatpos, discmatneg)
+  
+  #filter the original peak table (for extraction of feature data)
+  ptpos <- ptpos[posdisc$feat, ]
+  ptneg <- ptneg[negdisc$feat, ]
+  
+  #log2 transform data and make colnames
+  logmat   <- log2(discmat)
+  colnames(logmat) <- paste(disctbl$mode, disctbl$medint, disctbl$Mass, "@", round(disctbl$RT, 3))
+  #colnames(logmat) <- paste(disctbl$feature)
+  #colnames(logmat) <- disctbl$feature
+  cormat   <- cor(logmat)
+  colnames(cormat) <- NULL
+  return(cormat)
+}
+cormat <- corrdata(cofpos, cofneg)
+
+library(corrplot)
+cplot <- corrplot(cormat, method = "square", tl.col = "black", order = "hclust", 
+        tl.cex = 0.5, cl.ratio = 0.2, cl.align = "l", cl.pos = "r", 
+        cl.cex = 0.6, mar = c(1,1,1,1))
+
+#Get cluster order to paste into Excel
+writeClipboard(rownames(cplot))
+
+# Manhattan plot ----
+
+manhattandata <- function() {
+  library(tidyverse)
+  cof <- readRDS("prepdata/Coffee_features_Manhattan.rds")
+  
+  # Vector of colours for stripes, length 5934
+  colvec <- rep(c("col1", "col2"), 6, each = 500)[1:nrow(cof)]
+  
+  #Make data frame for Manhattan ggplot. Added variables: order, the factor of colours, 
+  #conditional mutate of this for the final colour vector
+  df <- cof %>% arrange(RT) %>% 
+    mutate(order     = 1:n(), 
+           pointcol = colvec, 
+           direction = ifelse(Pcor > 0, "pos", "neg"), 
+           signif    = ifelse(pval < 0.05 & direction == "pos", "col3", pointcol),
+           signif2   = ifelse(pval < 0.05 & direction == "neg", "col4", signif),
+           signif3   = ifelse(pval < 0.05, "empty", "filled"),
+           #mz2       = ifelse(pval > 0.9953192, paste("m/z", Mass, sep = " "), NA)
+           mz        = ifelse(abs(Pcor) > 0.30, paste("m/z", Mass, sep = " "), NA))
+}
+df <- manhattandata()
+
+#Calculate raw and adjusted cut points for plot
+#signif <- filter(df, pval < 0.05)
+
+#For publication, reduce point size and font size
+library(ggplot2)
+ggplot(df, aes(x = order, y = abs(Pcor), colour = signif2, shape = signif3)) + 
+#ggplot(df, aes(x = order, y = -log10(rawp), colour = signif2, shape = signif3)) +
+  geom_hline(yintercept = c(0.2, 0.4), linetype = c("solid"), colour = "grey") +
+  #geom_hline(yintercept = c(-log10(0.05), -log10(0.9953192)), linetype = "dashed", colour = "black") +
+  geom_point(size = 1) + theme_bw(base_size = 10) +
+  #scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
+  scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
+  scale_shape_manual(values = c(1, 16)) + 
+  scale_x_continuous(name = "Elution order (increasing lipophilicity)", expand = c(0.02,0)) +
+  scale_y_continuous(name = "Partial Pearson correlation coefficient", expand = c(0.01, 0.01)) +
+  #scale_y_continuous(name = "-log10(pvalue)", expand = c(0.01, 0.01)) +
+  geom_text(aes(label = mz), hjust = -0.1, vjust = 0, size = 1.5, colour = "black") +
+  #geom_hline(yintercept = -0.00, colour = "white", size = 2) +
+  theme(legend.position = "none", 
+        text = element_text(size=8),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+#Plot for publication one-column
+ggsave("manhattan coffee paper1.png", width = 100, height = 60, units = "mm")
+ggsave("manhattan coffee paper1.svg", width = 100, height = 60, units = "mm")
