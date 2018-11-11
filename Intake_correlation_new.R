@@ -167,7 +167,7 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   
   ### Extract feature data ---------------------------------------------------------------------
   
-  #get mass and RT from peak table and add a feature number for joining. First round cols
+  # get mass and RT from peak table and add a feature number for joining. First round cols
   splitcl <- rownames_to_column(pt, var = "ID") %>% 
     select(ID) %>%
     separate(ID, into = c("Mass", "RT"), sep = "@", convert = T) %>% 
@@ -175,13 +175,13 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     select(mode, Mass, RT, feat) %>%
     mutate(feature = feat)
   
-  #Give pos and neg mode data unique feature numbers. Neg numbers start from 10000
+  # Give pos and neg mode data unique feature numbers. Neg numbers start from 10000
   disc <- if(pos == T) splitcl else splitcl %>% mutate(feature = feat + 10000)
   
   massRT <- disc[ind, ]
-  medint <- round(apply(mat[, massRT$feat], 2, median))
   
-  #count detections for each feature
+  # Get median intensities and count detections for each feature
+  medint <- round(apply(mat[, massRT$feat], 2, median))
   detect  <- apply(mat[, ind], 2, function(x) sum(x > 1))
   
   #put everything into a df
@@ -261,15 +261,16 @@ manhattandata <- function() {
   
   # Vector of colours for stripes, length 5934
   colvec <- rep(c("col1", "col2"), 6, each = 500)[1:nrow(cof)]
+  colvec2 <- rep(brewer.pal(10, "Paired"), each = 600)[1:nrow(cof)]
   
   #Make data frame for Manhattan ggplot. Added variables: order, the factor of colours, 
   #conditional mutate of this for the final colour vector
   df <- cof %>% arrange(RT) %>% 
     mutate(order     = 1:n(), 
-           pointcol = colvec, 
+           pointcol = colvec2, 
            direction = ifelse(Pcor > 0, "pos", "neg"), 
-           signif    = ifelse(pval < 0.05 & direction == "pos", "col3", pointcol),
-           signif2   = ifelse(pval < 0.05 & direction == "neg", "col4", signif),
+           signif    = ifelse(pval < 0.05 & direction == "pos", "#000000", pointcol),
+           signif2   = ifelse(pval < 0.05 & direction == "neg", "#000000", signif),
            signif3   = ifelse(pval < 0.05, "empty", "filled"),
            #mz2       = ifelse(pval > 0.9953192, paste("m/z", Mass, sep = " "), NA)
            mz        = ifelse(abs(Pcor) > 0.30, paste("m/z", Mass, sep = " "), NA))
@@ -283,11 +284,11 @@ df <- manhattandata()
 library(ggplot2)
 ggplot(df, aes(x = order, y = abs(Pcor), colour = signif2, shape = signif3)) + 
 #ggplot(df, aes(x = order, y = -log10(rawp), colour = signif2, shape = signif3)) +
-  geom_hline(yintercept = c(0.2, 0.4), linetype = c("solid"), colour = "grey") +
+  geom_hline(yintercept = c(0.2, 0.4), linetype = c("dashed"), colour = "grey") +
   #geom_hline(yintercept = c(-log10(0.05), -log10(0.9953192)), linetype = "dashed", colour = "black") +
   geom_point(size = 1) + theme_bw(base_size = 10) +
   #scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
-  scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
+  #scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
   scale_shape_manual(values = c(1, 16)) + 
   scale_x_continuous(name = "Elution order (increasing lipophilicity)", expand = c(0.02,0)) +
   scale_y_continuous(name = "Partial Pearson correlation coefficient", expand = c(0.01, 0.01)) +
