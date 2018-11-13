@@ -66,13 +66,14 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
     pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-    #pt <- pt[CSmatchpos, ]
+    pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
     pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-    #pt <- pt[CSmatchneg, ]
+    pt <- pt[CSmatchneg, ]
   }
+  
   
   #use sampvec to get 451 subjects only
   mat <- t(pt[ , sampvec])
@@ -182,10 +183,13 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   
   # Get median intensities and count detections for each feature
   medint <- round(apply(mat[, massRT$feat], 2, median))
-  detect  <- apply(mat[, ind], 2, function(x) sum(x > 1))
+  detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
+  
+  # Get IDs of matched features
+  CS.feat <- if(pos == T) CSmatchpos[filt] else CSmatchneg[filt]
   
   #put everything into a df
-  disctbl <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval) %>%
+  disctbl <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval, CS.feat) %>%
     filter(pval < pcutoff) %>% arrange(desc(Pcor))
 
 }
@@ -199,8 +203,8 @@ alcpos <- intakecor(food = "Qe_Alc", incr = F)
 alcneg <- intakecor(food = "Qe_Alc", incr = F, pos = F)
 
 # Filtered by CS/HCC matching
-alcpos1 <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250)
-alcneg1 <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250)
+alcpos.cs <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250, pcutoff = 1)
+alcneg.cs <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250, pcutoff = 1)
 
 # Coffee matrix only
 logmat <- intakecor(incr = F, impute = T, model = F)
@@ -266,11 +270,9 @@ manhattandata <- function() {
   #Make data frame for Manhattan ggplot. Added variables: order, the factor of colours, 
   #conditional mutate of this for the final colour vector
   df <- cof %>% arrange(RT) %>% 
-    mutate(order     = 1:n(), 
-           pointcol = colvec2, 
-           direction = ifelse(Pcor > 0, "pos", "neg"), 
-           signif    = ifelse(pval < 0.05 & direction == "pos", "#000000", pointcol),
-           signif2   = ifelse(pval < 0.05 & direction == "neg", "#000000", signif),
+    mutate(order     = 1:n(), pointcol = colvec, 
+           signif    = ifelse(pval < 0.05 & Pcor > 0, "col3", pointcol),
+           signif2   = ifelse(pval < 0.05 & Pcor < 0, "col4", signif),
            signif3   = ifelse(pval < 0.05, "empty", "filled"),
            #mz2       = ifelse(pval > 0.9953192, paste("m/z", Mass, sep = " "), NA)
            mz        = ifelse(abs(Pcor) > 0.30, paste("m/z", Mass, sep = " "), NA))
@@ -286,8 +288,8 @@ ggplot(df, aes(x = order, y = abs(Pcor), colour = signif2, shape = signif3)) +
 #ggplot(df, aes(x = order, y = -log10(rawp), colour = signif2, shape = signif3)) +
   geom_hline(yintercept = c(0.2, 0.4), linetype = c("dashed"), colour = "grey") +
   #geom_hline(yintercept = c(-log10(0.05), -log10(0.9953192)), linetype = "dashed", colour = "black") +
-  geom_point(size = 1) + theme_bw(base_size = 10) +
-  #scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
+  geom_point(size = 1.2) + theme_bw(base_size = 10) +
+  scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
   #scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
   scale_shape_manual(values = c(1, 16)) + 
   scale_x_continuous(name = "Elution order (increasing lipophilicity)", expand = c(0.02,0)) +
