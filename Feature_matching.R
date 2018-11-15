@@ -43,13 +43,15 @@ neg.match <- feature.match(mode = "neg")
 # Vectors of matched features
 CSmatchpos <- unique(pos.match$CS.feat)
 CSmatchneg <- unique(neg.match$CS.feat)
-HCCmatchpos <- unique(pos.match$CS.feat)
-HCCmatchneg <- unique(neg.match$CS.feat)
+HCCmatchpos <- unique(pos.match$HCC.feat)
+HCCmatchneg <- unique(neg.match$HCC.feat)
 
 # ----
 
 # Use vectors to subset peak tables and run partial correlation function
-# Run functions from Intake_correlation script. Output is assigned alcpos.cs etc
+# Now functions from Intake_correlation scripts. Output is assigned alcpos.cs etc
+
+# ----
 
 # Pos mode
 
@@ -70,6 +72,35 @@ neg.match1  <- neg.match %>% left_join(alcneg.cs1, by = "CS.feat") %>%
 
 # Plot correlations
 plot(neg.match1$Pcor.x, neg.match1$Pcor.y, xlab = "Correlation CS", ylab = "Correlation HCC")
+
+# Plot all 
+
+library(ggplot2)
+library(ggrepel)
+
+all.match <- bind_rows(pos.match1, neg.match1, .id = "mode") %>% 
+  mutate(mz = ifelse(Pcor.x > 0.2 & Pcor.y > 0.2, paste(Mass.x, round(RT, 2), sep = "@"), NA),
+         pointcol= ifelse(Pcor.x > 0.2 & Pcor.y > 0.2, "A", "B"))
+
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+all.match %>%
+  ggplot(aes(x = Pcor.x, y = Pcor.y, shape = mode, colour = pointcol)) + geom_point() + theme_bw() +
+  scale_color_manual(values = c("black", "darkgrey")) +
+  xlab("Partial correlation cross-sectional") + ylab("Partial correlation HCC") +
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_text_repel(aes(label = mz), size = 3, direction = "both", nudge_x = 0, point.padding = 0.4,
+                  segment.size = 0.25, force = 0.2) +
+  theme(legend.position = "none") + 
+  scale_x_continuous(expand = c(0,0), limits = c(0, 0.5)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 0.5))
+
+
+
+
+
+
 
 
 # ----

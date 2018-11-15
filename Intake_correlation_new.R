@@ -261,6 +261,7 @@ writeClipboard(rownames(cplot))
 
 manhattandata <- function() {
   library(tidyverse)
+  library(RColorBrewer)
   cof <- readRDS("prepdata/Coffee_features_Manhattan.rds")
   
   # Vector of colours for stripes, length 5934

@@ -4,17 +4,17 @@
 # Data preparation -----------------------------------------------------------------------------------------
 library(tidyverse)
 coffee4hcc <- function(){
-  cycloproval <- read_csv("Cyclo pro val HCC data_1.csv") %>% slice(1)
+  cycloproval <- read_csv("data/Cyclo pro val HCC data_1.csv") %>% slice(1)
 
   #pos mode data
-  pos <- read_csv("Coffee 8 pos biomarkers HCC data.csv") %>% bind_rows(cycloproval) %>% 
+  pos <- read_csv("data/Coffee 8 pos biomarkers HCC data.csv") %>% bind_rows(cycloproval) %>% 
     select("Compound Name", contains("Area")) %>% t
   colnames(pos) <- pos[1, ]
   pos           <- pos[-1, ]
   pos.samp      <- pos[1:258, ]
 
   #neg mode data
-  neg <- read_csv("Coffee 2 neg biomarkers HCC data.csv") %>% select("Compound Name", contains("Area")) %>% t
+  neg <- read_csv("data/Coffee 2 neg biomarkers HCC data.csv") %>% select("Compound Name", contains("Area")) %>% t
   colnames(neg) <- neg[1, ]
   neg           <- neg[-1, ]
   neg.samp      <- neg[1:258, ]
@@ -32,12 +32,12 @@ coffee4hcc <- function(){
 
   #Get metadata. Read in from uncompressed SAS file and subset subject metadata
   library(haven)
-  hcc <- read_sas("D:/My SAS Files/merged_untarg1.sas7bdat") %>% 
+  hcc <- read_sas("data/merged_untarg1.sas7bdat") %>% 
     select(Id_Bma, Idepic_Samp:alc_drinker_m) %>%
     separate("Id_Bma", into = c("Date", "LabID", "Mode"), sep=c(9,19))
   
   #For liver function
-  lf <- read_sas("sas/live_caco1.sas7bdat") %>% 
+  lf <- read_sas("data/live_caco1.sas7bdat") %>% 
     filter(Match_Caseset != 387 | Idepic != "22____22304249") %>%
     select(Idepic, Liver_Function_Score, Liver_Function_Score_C)
 
@@ -77,7 +77,7 @@ coffee4hcc <- function(){
 }
 chcc <- coffee4hcc()
 # saveRDS(chcc, "HCC coffee biomarkers and metadata.rds")
-chcc <- readRDS("HCC coffee biomarkers and metadata.rds")
+chcc <- readRDS("prepdata/HCC coffee biomarkers and metadata.rds")
 
 # Association HCC coffee ------------------------------------------------------------------------------------
 
