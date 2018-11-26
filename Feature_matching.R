@@ -2,7 +2,7 @@
 
 # Get common features between CS and HCC datasets and use this as a starting point for analysis
 
-feature.match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "neg")) {
+CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "neg"), filt = NULL) {
 
   library(haven)
   library(tidyverse)
@@ -11,53 +11,63 @@ feature.match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "
   # Pos or neg mode for CS and HCC
   
   if(mode == "pos") {
-  cs <- read_tsv("data/EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS.feat = 1:n())
+  cs <- read_tsv("data/EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
   hcc <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% 
-    select(1) %>% slice(-(83:84)) %>% mutate(HCC.feat = 1:n())
+    select(1) %>% slice(-(83:84)) %>% mutate(HCC_feat = 1:n())
   
     } else if (mode == "neg") {
       
-  cs <- read_tsv("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS.feat = 1:n())
+  cs <- read_tsv("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
   hcc <- read_csv("data/EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
-    select(1) %>% mutate(HCC.feat = 1:n())
-  }
+    select(1) %>% mutate(HCC_feat = 1:n())
+    }
+  
+  if(!is.null(filt)) cs <- cs[filt, ]
   
   # Join features
   csfeat  <- cs %>% separate(Compound, into = c("Mass", "RT"), sep = "@", convert = T)
   hccfeat <- hcc %>% separate(Compound, into = c("Mass", "rt"), sep = "@", convert = T)
   
-  joindf <- difference_inner_join(csfeat, hccfeat, max_dist = 0.005, distance_col = "massdiff") %>% 
+  output <- difference_inner_join(csfeat, hccfeat, max_dist = 0.005, distance_col = "massdiff") %>% 
     filter(abs(RT - rt) < RTtol) #%>% arrange(CS.feat)
   
-  return(joindf)
+  return(output)
   
   # 2922 features matched in pos and 1243 in neg mode
   
   # Get unique vector of CSS features that matched. These are then used in Intake_correlation to filter starting FTs
-  if(study == "cs") v1 <- unique(joindf$CS.feat) else if (study == "hcc") v1 <- unique(joindf$HCC.feat)
+  if(study == "cs") v1 <- unique(joindf$CS_feat) else if (study == "hcc") v1 <- unique(joindf$HCC_feat)
 } 
 
-pos.match <- feature.match(mode = "pos")
-neg.match <- feature.match(mode = "neg")
+# Outputs matched df for pos and neg
+matched_pos <- CS_HCC_match(mode = "pos")
+matched_neg <- CS_HCC_match(mode = "neg")
 
-# Vectors of matched features
-CSmatchpos <- unique(pos.match$CS.feat)
-CSmatchneg <- unique(neg.match$CS.feat)
-HCCmatchpos <- unique(pos.match$HCC.feat)
-HCCmatchneg <- unique(neg.match$HCC.feat)
+# Extract vectors of matched features
+CSpos <- unique(matched_pos$CS.feat)
+CSneg <- unique(matched_neg$CS.feat)
+HCCpos <- unique(matched_pos$HCC.feat)
+HCCneg <- unique(matched_neg$HCC.feat)
+
+# Filtered by those matched features that are significant in CS only
+filt1 <- alcpos_cs$feat
+filt2 <- alcneg_cs$feat
+
+matched_pos_filt <- CS_HCC_match(mode = "pos", filt = filt1)
+matched_neg_filt <- CS_HCC_match(mode = "neg", filt = filt2)
 
 # ----
 
 # Use vectors to subset peak tables and run partial correlation function
-# Now functions from Intake_correlation scripts. Output is assigned alcpos.cs etc
+# Now functions from Intake_correlation scripts, CS and HCC. Output is assigned alcpos.cs etc
 
 # ----
 
-# Pos mode
+# Pos mode: subset Pcor, pval and feature number and join datasets
 
 alcpos.cs1 <- alcpos.cs %>% select(Pcor : CS.feat)
 alcpos.hcc1 <- alcpos.hcc %>% select(Pcor : HCC.feat)
-pos.match1 <- pos.match %>% left_join(alcpos.cs1, by = "CS.feat") %>% 
+pos.match1 <- matched_pos %>% left_join(alcpos.cs1, by = "CS.feat") %>% 
   left_join(alcpos.hcc1, by = "HCC.feat")
 
 # Plot correlations
@@ -67,7 +77,7 @@ plot(pos.match1$Pcor.x, pos.match1$Pcor.y, xlab = "Correlation CS", ylab = "Corr
 
 alcneg.cs1  <- alcneg.cs %>% select(Pcor : CS.feat)
 alcneg.hcc1 <- alcneg.hcc %>% select(Pcor : HCC.feat)
-neg.match1  <- neg.match %>% left_join(alcneg.cs1, by = "CS.feat") %>% 
+neg.match1  <- matched_neg %>% left_join(alcneg.cs1, by = "CS.feat") %>% 
   left_join(alcneg.hcc1, by = "HCC.feat")
 
 # Plot correlations
