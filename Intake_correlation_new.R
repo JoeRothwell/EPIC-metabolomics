@@ -3,7 +3,7 @@
 # Beer 140301; Total dietary fibre QEFIBT
 
 # Function for baseline correction
-baselines <- function(x) {
+baselines <- function() {
   
   #calculation of raw and corrected peaks for new data 4-4-2017
   #after raw data check, pos mode@ 357 is classified as raw, 204 is corr
@@ -43,7 +43,9 @@ bl <- baselines()
 
 # ----
 
-intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T){
+# Function for intake correlation
+intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, 
+                      model = T, matchvec = NULL){
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
@@ -66,14 +68,16 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
     pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-    pt <- pt[CSmatchpos, ]
+    #pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
     pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-    pt <- pt[CSmatchneg, ]
+    #pt <- pt[CSmatchneg, ]
   }
   
+  # Subset by a vector of features if needed
+  if(!is.null(matchvec)) pt <- pt[matchvec, ] else pt
   
   #use sampvec to get 451 subjects only
   mat <- t(pt[ , sampvec])
@@ -145,7 +149,7 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     if(food == "cof") {
 
       #mod1 <- lm(cups   ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
-    mod1 <- lm(log2(cof + 1)  ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
+    mod1 <- lm(log2(cof + 1) ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
     mod2 <- lm(x[x > 0] ~ centre + sex + R_BMI + smoke + type.plate + baseline, data = labs[x > 0, ])
     
       }   else if(food == "Qe_Alc") {
@@ -186,11 +190,13 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
   
   # Get IDs of matched features
-  CS.feat <- if(pos == T) CSmatchpos[filt] else CSmatchneg[filt]
+  #CS.feat <- if(pos == T) CSmatchpos[filt] else CSmatchneg[filt]
+  if(!is.null(matchvec)) CS_feat <- matchvec[filt] else matchvec
   
   #put everything into a df
-  disctbl <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval, CS.feat) %>%
-    filter(pval < pcutoff) %>% arrange(desc(Pcor))
+  output <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval)
+  output <- if(!is.null(matchvec)) cbind(output, CS_feat) else output
+  output <- output %>% filter(pval < pcutoff) %>% arrange(desc(Pcor))
 
 }
 
@@ -202,9 +208,9 @@ cofneg <- intakecor(incr = T, pos = F, pcutoff = 0.05)
 alcpos <- intakecor(food = "Qe_Alc", incr = F)
 alcneg <- intakecor(food = "Qe_Alc", incr = F, pos = F)
 
-# Filtered by CS/HCC matching
-alcpos.cs <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250, pcutoff = 1)
-alcneg.cs <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250, pcutoff = 1)
+# Filtered by CS/HCC matching. Change pcutoff as required
+alcpos_cs <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
+alcneg_cs <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
 
 # Coffee matrix only
 logmat <- intakecor(incr = F, impute = T, model = F)
