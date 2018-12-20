@@ -22,7 +22,8 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
     select(1) %>% mutate(HCC_feat = 1:n())
     }
   
-  if(!is.null(filt)) cs <- cs[filt, ]
+  # Filter by the ordered features
+  if(!is.null(filt)) cs <- cs[sort(filt), ]
   
   # Join features
   csfeat  <- cs %>% separate(Compound, into = c("Mass", "RT"), sep = "@", convert = T)
@@ -115,7 +116,7 @@ all.match %>%
 
 # ----
 
-# loop to get tolerance vs feature numbers (doesn't work yet)
+# loop to get tolerance vs feature numbers
 tol <- seq(0.05, 0.15, by  = 0.005)
 output <- numeric(length(tol))
 for(i in 1:length(tol)) {
