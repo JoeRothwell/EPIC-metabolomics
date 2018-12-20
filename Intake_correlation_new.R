@@ -39,13 +39,10 @@ baselines <- function() {
   #return(bl)
   # saveRDS(bl, "baselines pos neg.rds")
 }
-bl <- baselines()
+#bl <- baselines()
 
-# ----
-
-# Function for intake correlation
-intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, 
-                      model = T, matchvec = NULL){
+# Functions for intake correlation
+intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T, matchvec = NULL) {
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
@@ -91,7 +88,7 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   mat  <- mat[ , filt]
   
   #filter the original peak table (for extraction of feature data)
-  pt <- pt[filt, sampvec]
+  pt.subset <- pt[filt, sampvec]
   
   ### Read and process metadata ------------------------------------------------------------
   
@@ -110,10 +107,10 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
         (which.min(x) == 1 | which.min(x) == 2) &   # lowest must be Q1 or Q2
         x[3] > x[1] }                               # Q3 must be greater than Q1
   
-  if(incr == T) ind <- apply(as.matrix(qmeds[, -1]), 2, increasing) else ind <- rep(T, ncol(mat))
+  if(incr == T) ind <- apply(as.matrix(qmeds[, -1]), 2, increasing) else ind <- as.logical(1: (ncol(qmeds) - 1))
   
   #subset increasing only if necessary
-  #filtmat <- if(incr == T) mat[, ind] else mat
+  #filtmat <- if(incr == T) mat[, ind] else filtmat <- mat
   filtmat <- mat[, ind]
   
   #impute missings with half minimum value
@@ -147,17 +144,17 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
     #All obs are passed but logcof automatically has NAs removed and is also subset for nonzero cons
     ## cups or volume
     if(food == "cof") {
-
+      
       #mod1 <- lm(cups   ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
-    mod1 <- lm(log2(cof + 1) ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
-    mod2 <- lm(x[x > 0] ~ centre + sex + R_BMI + smoke + type.plate + baseline, data = labs[x > 0, ])
-    
-      }   else if(food == "Qe_Alc") {
-
-    mod1 <- lm(log2(Qe_Alc + 1) ~ country + sex + R_BMI + log2(cof+1) + smoke, data = labs[x > 0, ])
-    mod2 <- lm(x[x > 0] ~ country + sex + R_BMI + log2(cof+1) + smoke + type.plate + baseline, data = labs[x > 0, ])
-
-      }
+      mod1 <- lm(log2(cof + 1) ~ centre + sex + R_BMI + smoke, data = labs[x > 0, ])
+      mod2 <- lm(x[x > 0] ~ centre + sex + R_BMI + smoke + type.plate + baseline, data = labs[x > 0, ])
+      
+    }   else if(food == "Qe_Alc") {
+      
+      mod1 <- lm(log2(Qe_Alc + 1) ~ country + sex + R_BMI + log2(cof+1) + smoke, data = labs[x > 0, ])
+      mod2 <- lm(x[x > 0] ~ country + sex + R_BMI + log2(cof+1) + smoke + type.plate + baseline, data = labs[x > 0, ])
+      
+    }
     
     cor.test(residuals(mod1), residuals(mod2))
   }
@@ -173,20 +170,21 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   ### Extract feature data ---------------------------------------------------------------------
   
   # get mass and RT from peak table and add a feature number for joining. First round cols
-  splitcl <- rownames_to_column(pt, var = "ID") %>% 
-    select(ID) %>%
-    separate(ID, into = c("Mass", "RT"), sep = "@", convert = T) %>% 
-    mutate(mode = ionmode, feat = 1:n()) %>% 
-    select(mode, Mass, RT, feat) %>%
-    mutate(feature = feat)
+  splitcol <- rownames_to_column(pt.subset, var = "ID") %>%  select(ID) %>%
+    separate(ID, into = c("Mass", "RT"), sep = "@", convert = T) 
+  
+  disc <- splitcol %>% mutate(mode = ionmode, feat = (1:nrow(pt))[filt] ) %>% 
+    select(mode, Mass, RT, feat)
   
   # Give pos and neg mode data unique feature numbers. Neg numbers start from 10000
-  disc <- if(pos == T) splitcl else splitcl %>% mutate(feature = feat + 10000)
+  disc <- if(pos == F) disc %>% mutate(feat1 = feat + 10000) else disc %>% mutate(feat1 = feat)
   
+  # Subset mass and RT for increasing features
+  #if(incr == T) massRT <- disc[ind, ] else massRT <- disc
   massRT <- disc[ind, ]
   
   # Get median intensities and count detections for each feature
-  medint <- round(apply(mat[, massRT$feat], 2, median))
+  medint <- round(apply(mat[, ind], 2, median))
   detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
   
   # Get IDs of matched features
@@ -196,28 +194,155 @@ intakecor <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.0
   #put everything into a df
   output <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval)
   output <- if(!is.null(matchvec)) cbind(output, CS_feat) else output
-  output <- output %>% filter(pval < pcutoff) %>% arrange(desc(Pcor))
-
+  output <- output %>% filter(pval < pcutoff) #%>% arrange(desc(Pcor))
 }
+intakecor_hcc <- function(pos = T, matchvec = NULL) {
+  # Intensity data and metadata need to first be joined. This is easiest to do by putting lab ID in the same
+  # order and then binding by col.
+  
+  # Intensity data
+  library(tidyverse)
+  if(pos == T) {
+    ionmode <- "Pos"
+    ft <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% slice(-(83:84))
+    #ft <- ft[HCCmatchpos, ]
+  } else {
+    ionmode <- "Neg"
+    ft <- read_csv("data/EPIC liver cancer 2016 RP NEG feature table.csv")
+    #ft <- ft[HCCmatchneg, ]
+  }
+  
+  # Subset by a vector of features if needed
+  if(!is.null(matchvec)) ft <- ft[matchvec, ] else ft
+  
+  names <- ft %>% select(Compound) %>% pull
+  
+  # Subset samples and add feature names
+  ft <- ft %>% select(contains("LivCan_")) %>% t
+  colnames(ft) <- names
+  
+  # Split sample ID to get codes for joining to metadata. Remove ID cols
+  ints <- ft %>% data.frame %>% rownames_to_column() %>% 
+    separate(rowname, sep = "_", into=c("id1", "id2"), convert = T) %>% 
+    arrange(id2) %>% select(-(1:2))
+  
+  # Metadata is from Laura's SAS file
+  # As for intensities, split ID to get a code for joining
+  library(haven)
+  meta <- read_sas("data/newdataset_missings1.sas7bdat") %>% select(-starts_with("Untarg_")) %>%
+    separate(Id_Bma, sep = "_", into=c("id1", "id2"), convert = T) %>% arrange(id2)
+  
+  # Get vector of controls for subsetting
+  controls <- meta$Cncr_Caco_Live == 0
+  ints0 <- ints[controls, ]
+  
+  #Convert variables of interest to factors
+  varlist <- c("Country", "Sex", "Smoke_Stat", "Batch_Rppos", "Batch_Rpneg")
+  meta <- meta %>% mutate_at(vars(varlist), as.factor)
+  
+  #Partial correlation between alcohol intake and each feature
+  #Get residuals from lm on alcohol intake: BMI, smoke, sex, batch, country, CC status
+  
+  # Subsetting: controls only (with suffix 0), matched features only
+  
+  meta0 <- meta[controls, ]
+  filt  <- colSums(ints0 > 1) > 65
+  
+  # Feature match filter will be made here
+  ints0 <- ints[controls, filt]
+  
+  logints <- log2(ints0)
+  
+  # Subset original feature table for extraction of feature data later
+  ft.subset <- ft[controls, filt]
+  namesfilt <- names[filt]
+  
+  print(paste("Testing", ncol(logints), "features..."))
+  
+  #correlation test food intake with intensities of selected features
+  lcor <- apply(logints, 2, function(x) cor.test(log2(meta0$Qe_Alc + 1)[x > 0], x[x > 0]) )
+  
+  #get raw correlation coefficients
+  rcor <- unlist(sapply(lcor, "[", 4))
+  rawp <- p.adjust(unlist(sapply(lcor, "[", 3)), method = "BH")
+  
+  partialcor <- function(x) {
+    
+    # Get residuals on log transformed alcohol intake and each feature
+    mod1 <- lm(log2(Qe_Alc + 1) ~ Country + Sex + Bmi_C + Smoke_Stat, data = meta0[x > 0, ])
+    mod2 <- lm(x[x > 0] ~ Country + Sex + Bmi_C + Batch_Rppos + Smoke_Stat, data = meta0[x > 0, ])
+    
+    # Correlate residuals               
+    cor.test(residuals(mod1), residuals(mod2))
+  }
+  
+  #Applying the partialcor function across the pos and neg matrices columnwise (argument=2)
+  lpcorpos <- apply(logints, 2, partialcor)
+  
+  #extract p-values and correlations (pos mode)
+  Pcor  <- unlist(sapply(lpcorpos, "[", 4))
+  pval  <- p.adjust(unlist(sapply(lpcorpos, "[", 3)), method = "BH")
+  
+  # Split names into mass and RT columns  
+  massRT <- data.frame(namesfilt) %>%
+    separate(namesfilt, into = c("Mass", "RT"), sep = "@", convert = T) %>% 
+    mutate(mode = ionmode, feat = (1:ncol(ft))[filt] )
+  
+  massRT <- if(pos == F) massRT %>% mutate(feat1 = feat + 10000) else massRT %>% mutate(feat1 = feat)
+  
+  # Get median intensities and count detections for each feature (non-log matrix)
+  medint <- round(apply(ints0, 2, median))
+  detect <- apply(ints0, 2, function(x) sum(x > 1))
+  
+  # Add feature match variable and subset if necessary
+  if(!is.null(matchvec)) HCC_feat <- matchvec[filt] else matchvec
+  
+  #put everything into a df
+  output <- data.frame(massRT, detect, medint, rcor, rawp, Pcor, pval)
+  output <- if(!is.null(matchvec)) cbind(output, HCC_feat) else output
+  output <- output %>% filter(pval < 1) %>% arrange(desc(Pcor))
+}  
 
-# Coffee. Set pcutoff = 1 for Manhattan
-cofpos <- intakecor(incr = T, pos = T, pcutoff = 0.05)
-cofneg <- intakecor(incr = T, pos = F, pcutoff = 0.05)
-
-# Alcohol
-alcpos <- intakecor(food = "Qe_Alc", incr = F)
-alcneg <- intakecor(food = "Qe_Alc", incr = F, pos = F)
-
-# Filtered by CS/HCC matching. Change pcutoff as required
-alcpos_cs <- intakecor(food = "Qe_Alc", incr = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
-alcneg_cs <- intakecor(food = "Qe_Alc", incr = F, pos = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
-
-# Coffee matrix only
-logmat <- intakecor(incr = F, impute = T, model = F)
-scalemat <- scale(logmat)
+# For CS - HCC matching
+CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "neg"), filt = NULL) {
+  
+  library(haven)
+  library(tidyverse)
+  library(fuzzyjoin)
+  # Get CS data and HCC data (feature names only)
+  # Pos or neg mode for CS and HCC
+  
+  if(mode == "pos") {
+    cs <- read_tsv("data/EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% 
+      select(1) %>% slice(-(83:84)) %>% mutate(HCC_feat = 1:n())
+    
+  } else if (mode == "neg") {
+    
+    cs <- read_tsv("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("data/EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
+      select(1) %>% mutate(HCC_feat = 1:n())
+  }
+  
+  # Filter by the ordered features
+  if(!is.null(filt)) cs <- cs[filt, ]
+  
+  # Join features
+  csfeat  <- cs %>% separate(Compound, into = c("Mass", "RT"), sep = "@", convert = T)
+  hccfeat <- hcc %>% separate(Compound, into = c("Mass", "rt"), sep = "@", convert = T)
+  
+  output <- difference_inner_join(csfeat, hccfeat, max_dist = 0.005, distance_col = "massdiff") %>% 
+    filter(abs(RT - rt) < RTtol) #%>% arrange(CS.feat)
+  
+  return(output)
+  
+  # 2922 features matched in pos and 1243 in neg mode
+  
+  # Get unique vector of CSS features that matched. These are then used in Intake_correlation to filter starting FTs
+  if(study == "cs") v1 <- unique(joindf$CS_feat) else if (study == "hcc") v1 <- unique(joindf$HCC_feat)
+} 
 
 # Correlation heatmap ----
-
 corrdata <- function(posdisc, negdisc) {
   ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
   ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
