@@ -6,7 +6,7 @@ sumtab <- function() {
   alc_g <- read_csv("alcohol/alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI, Age_Dtq)
   
   #cs_metadata file now contains NAs where needed for easier subsetting. Read in and subset subjects (remove QC metadata)
-  meta <- read.csv("cs_metadata.csv") %>% filter(present.pos == T & stype == "SA") %>%
+  meta <- read.csv("data/cs_metadata.csv") %>% filter(present.pos == T & stype == "SA") %>%
     left_join(alc_g, by="Idepic") %>%  mutate(logQe_Alc = log(Qe_Alc + 1), 
       cupvols = case_when(country == "France" ~ 146.59, country == "Germany" ~ 209.32, 
                           country == "Greece" ~ 135.48, country == "Italy" ~ 55.2), cups = cof/cupvols)
@@ -37,21 +37,22 @@ tab <- sumtab()
 hist(meta$cof, breaks = 50, col = "gray")
 
 # Boxplot of coffee intake by country (can change predictor to sex, smoke, alc. bev)
-boxplot(cof ~ country, data=meta, col="dodgerblue", ylab="Alcohol intake (mL/day)")
+boxplot(sqrt(cof) ~ country, data=meta, col="dodgerblue", ylab="Alcohol intake (mL/day)")
 
 # Boxplot for powerpoint slide. For publication reduce font size to 10 and B&W
+library(ggplot2)
 # ggplot(meta, aes(x=country, y=cups)) +
 ggplot(meta, aes(x=country, y=cof)) + 
   #geom_boxplot(fill="grey", outlier.colour="white") +
   geom_boxplot(fill="dodgerblue", outlier.colour = "white") + 
   theme_bw(base_size = 10) + 
-  geom_jitter(position=position_jitter(width=0.1), size=1, #colour="red")  +
+  geom_jitter(position=position_jitter(width=0.1), size=1) + #, colour="red")  +
   theme(panel.grid.minor=element_blank(), 
         #panel.grid.major = element_blank(),
         panel.border=element_rect(colour = "black")) +
   #ylim(c(0,1250)) +
   xlab("") + 
-  ylab("Coffee intake mL/day")) #+
+  ylab("Coffee intake mL/day") #+
   #ylab("Coffee intake cups/day")
   
 ggsave("intake boxplot2.png", width=160, height = 120, units="mm")
