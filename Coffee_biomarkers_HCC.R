@@ -1,7 +1,7 @@
 # Coffee biomarker data from Profinder for HCC study. Read in data generated from Profinder
 # All samples, blanks and QCs
 
-# Data preparation -----------------------------------------------------------------------------------------
+# Data preparation ----
 library(tidyverse)
 coffee4hcc <- function(){
   cycloproval <- read_csv("data/Cyclo pro val HCC data_1.csv") %>% slice(1)
@@ -42,7 +42,7 @@ coffee4hcc <- function(){
     select(Idepic, Liver_Function_Score, Liver_Function_Score_C)
 
   #For coffee intakes
-  cof <- readRDS("Coffee intakes all EPIC.rds")
+  cof <- readRDS("prepdata/Coffee intakes all EPIC.rds")
   
   hcc <- hcc %>% left_join(cof, by="Idepic")
   hcc <- hcc %>% left_join(lf, by="Idepic")
@@ -76,39 +76,47 @@ coffee4hcc <- function(){
   #write.dta(coffee.hcc, "D://HCC_coffee_metabolites1.dta")
 }
 chcc <- coffee4hcc()
+
 # saveRDS(chcc, "HCC coffee biomarkers and metadata.rds")
 chcc <- readRDS("prepdata/HCC coffee biomarkers and metadata.rds")
 
-# Association HCC coffee ------------------------------------------------------------------------------------
 
+# Association HCC coffee ----
+
+
+# Boxplot cases-controls
 ggplot(chcc, aes(x=as.factor(Caselive_Crs), y=sqrt(QGE130301))) + 
   geom_boxplot(fill = "grey", outlier.colour = "white") + 
   theme_classic() + geom_jitter(width=0.1, shape=1)
 
-chcc <- chcc %>% mutate(Case = ifelse(Caselive_Crs == 0, -3, 3), Case2 = ifelse(Caselive_Crs == 0, -1.5, 1.5))
-
+# Matched boxplot
+chcc <- chcc %>% mutate(Case = ifelse(Caselive_Crs == 0, -3, 3), 
+                        Case2 = ifelse(Caselive_Crs == 0, -1.5, 1.5))
 ggplot(chcc, aes(x = Case, y= sqrt(QGE130301), group = Caselive_Crs)) +
-  geom_boxplot(fill="dodgerblue", width=2) + theme_classic() +
+  geom_boxplot(fill="dodgerblue", width=2) + theme_bw() +
   geom_line(aes(x = Case2, group=Match_Caseset), colour="grey") +
   xlab("HCC controls vs cases") + ylab("sqrt(coffee intake)") +
   geom_point(aes(x = Case2))
-
-ggplot(chcc, aes(x = as.factor(Caselive_Crs), y= sqrt(QGE130301))) +
-  geom_line(aes(group=Match_Caseset, colour=as.factor(cof.cat))) + theme_classic() +
-  geom_point() +
-  xlab("Controls vs cases")
-
-fit <- lm(log(chcc$QGE130301 + 1) ~ chcc$Caselive_Crs)
-
-library(survival)
-cof.CLR <- clogit(Caselive_Crs ~ log2(QGE130301+1) + Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m +
-                    L_School + Pa_Mets + Waist_C + strata(Match_Caseset), data = chcc)
 
 # Replicate categories of Aleksandrova's paper
 chcc$cof.cat <- cut(chcc$QGE130301, breaks = c(0, 300, 450, 600, 1600), labels=c(1:4), include.lowest = T)
 table(chcc$cof.cat, chcc$Caselive_Crs)
 
-# Association HCC coffee metabolites -----------------------------------------------------------------------------------
+# Coloured effects plot
+ggplot(chcc, aes(x = as.factor(Caselive_Crs), y= sqrt(QGE130301))) +
+  geom_line(aes(group=Match_Caseset, colour=as.factor(cof.cat))) + theme_classic() +
+  geom_point() +
+  xlab("Controls vs cases")
+
+# Linear model
+fit <- lm(log(chcc$QGE130301 + 1) ~ chcc$Caselive_Crs)
+
+library(survival)
+cof.CLR <- clogit(Caselive_Crs ~ log2(QGE130301+1) + Bmi_C + Alc_Re + Smoke_Stat + 
+        alc_drinker_m + L_School + Pa_Mets + Waist_C + strata(Match_Caseset), data = chcc)
+
+
+# Association HCC coffee metabolites ----
 # check missings and equal cases and controls
 library(Amelia)
 missmap(chcc, rank.order=F)
@@ -142,7 +150,7 @@ CLR.coffee <- function(adj = T) {
   #adjusted or unadjusted models
   mods <- apply(ints, 2, fit.CLR)
 
-  #Pcor  <- unlist(sapply(lpcor, "[", 1))
+  Pcor  <- unlist(sapply(lpcor, "[", 1))
 
   #Extract OR and 95% CIs
   library(broom)
@@ -153,6 +161,23 @@ CLR.coffee <- function(adj = T) {
                           } else { 
                           output %>% mutate(model = "Raw") }
 }
+
+# Instead generate multiple functions for apply
+base <- Caselive_Crs ~ Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m + L_School + Pa_Mets + 
+  Waist_C + strata(Match_Caseset)
+
+mod1 <- function(x) clogit(Caselive_Crs ~ log2(x) + strata(Match_Caseset), data = chcc)
+mod2 <- function(x) clogit(update(base, .~. + log2(x)), data = chcc)
+mod3 <- function(x) clogit(update(base, .~. + log2(x) + log2(QGE130301+1)), data = chcc)
+mod4 <- function(x) clogit(update(base, .~. + log2(x) + Liver_Function_Score), data = chcc)
+
+#Make intensity matrix
+ints <- chcc %>% select(Trigonelline:AAMU) %>% as.matrix
+fit1 <- apply(ints, 2, mod1)
+fit2 <- apply(ints, 2, mod2)
+fit3 <- apply(ints, 2, mod3)
+fit4 <- apply(ints, 2, mod4)
+
 
 # Raw model, adjusted covariates, covariates + coffee, covariates + liver fn
 CLR.adj <- CLR.coffee(adj = T)
