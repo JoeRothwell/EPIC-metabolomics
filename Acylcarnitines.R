@@ -1,6 +1,6 @@
 library(tidyverse)
 
-# Filter compounds by a threshold of detection
+# Filter compounds by a threshold of detection (change location if necessary)
 ac <- read_csv("acylcarnitines.csv") %>% 
   filter(`Detection Frequency` > 50)
 
@@ -31,40 +31,40 @@ wcrf <- read_dta("data/Wcrf_Score.dta") %>% select(Idepic, Wcrf_C_Cal)
 meta.ffq <- meta %>% left_join(ffq, by="Idepic")
 meta.ffq <- meta.ffq %>% left_join(wcrf, by = "Idepic")
 
-#Extract the data file numbers from the column names for joining
+# Extract the data file numbers from the column names for joining
 sample.list <- colnames(ints)
 datalabel <- sample.list %>% str_match_all("[0-9]+") %>% unlist %>% as.numeric
 
 
-#Join AC intensities and FFQ/metadata
+# Join AC intensities and FFQ/metadata
 int.df <- cbind(datalabel = paste(datalabel, "(raw)", sep=""), mat) %>% tbl_df
 all.df <- left_join(int.df, meta.ffq, by = "datalabel") %>%
    filter(Wcrf_C_Cal != 3) %>% mutate(score_cat = ifelse(Wcrf_C_Cal %in% 1:2, 0, 1))
 
-#Convert data frame AC subset to numeric values for correlation and model
+# Convert data frame AC subset to numeric values for correlation and model
 acnmat <- select(all.df, contains(":")) %>% data.matrix
 logmat <- log2(acnmat)
 ffqmat <- select(all.df, starts_with("QGE"))
 meta1 <- select(all.df, order:score_cat)
 
-#test for missing values
+# test for missing values
 library(Amelia)
 missmap(all.df[, 142:381])
 colSums(ffqmat > 0)
 
-#Exclude zero SD columns
+# Exclude zero SD columns
 nonzerosd <- which(apply(ffqmat, 2, function(x) sd(x, na.rm=T) != 0))
-#Exclude foods recorded in less than 10 subjects
+# Exclude foods recorded in less than 10 subjects
 filt <- colSums(ffqmat > 0) >10
 ffqmat <- ffqmat[, filt]
 
 accor <- cor(acnmat, ffqmat, use = "pairwise.complete.obs")
-#NAs in QGE06030202 (176)
+# NAs in QGE06030202 (176)
 
 library(gplots)
 heatmap.2(accor, trace = "none", col=redblue(256), Colv = F)
 max(accor)
-#get highest correlation
+# get highest correlation
 which(accor == max(accor), arr.ind = TRUE)
 
 
@@ -74,7 +74,7 @@ varlist <- c("type.plate", "country", "sex")
 meta1 <- meta1 %>% mutate_at(vars(varlist), as.factor)
 
 meta1
-#logistic regression scores 1 and 2 vs 4 and 5
+# logistic regression scores 1 and 2 vs 4 and 5
 glm.ac <- function(x) glm(score_cat ~ x + type.plate + country + sex, data = meta1, family = "binomial")
 
 # apply function across metabolite matrix
@@ -93,6 +93,7 @@ meanfc   <- means[, 2]/means[, 1]
 df <- data.frame(p, Fold_change = meanfc[-1]) %>% 
   mutate(direction   = ifelse(Fold_change > 1, "high_score", "low_score"))
 
+# make plot
 library(ggplot2)
 ggplot(df, aes(x = reorder(Cmpd, -p.fdr), y = -log10(p.value), shape=direction, colour=direction)) + 
   theme_minimal(base_size = 10) +
@@ -101,8 +102,8 @@ ggplot(df, aes(x = reorder(Cmpd, -p.fdr), y = -log10(p.value), shape=direction, 
   ylab("-log10(FDR-adjusted p-value)") + xlab("Compound") +
   facet_grid(. ~ Cnumber, scales = "free_x", space = "free_x", switch= "y") +
   theme(axis.text.x = element_text(angle = 90, size=7, hjust = 0.95, vjust = 0.5))
-#ggtitle("Metabolite associations with WCRF score (cal)") +
-#ggsave("WCRF score associations FAs.svg")
+# ggtitle("Metabolite associations with WCRF score (cal)") +
+# ggsave("WCRF score associations FAs.svg")
 
 
 
