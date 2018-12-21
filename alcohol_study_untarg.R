@@ -2,7 +2,7 @@
 
 # Intake correlation for CS and HCC study and match function
 # Get functions
-source("Intake_correlation_new.R")
+source("Intake_cor_functions.R")
 # Approach 1: match HCC and CS features and perform separate correlations on the overlap ----
 
 matched_pos <- CS_HCC_match(mode = "pos")

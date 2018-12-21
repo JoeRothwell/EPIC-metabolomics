@@ -378,15 +378,15 @@ corrdata <- function(posdisc, negdisc) {
   colnames(cormat) <- NULL
   return(cormat)
 }
-cormat <- corrdata(cofpos, cofneg)
+# cormat <- corrdata(cofpos, cofneg)
 
 library(corrplot)
 cplot <- corrplot(cormat, method = "square", tl.col = "black", order = "hclust", 
         tl.cex = 0.5, cl.ratio = 0.2, cl.align = "l", cl.pos = "r", 
         cl.cex = 0.6, mar = c(1,1,1,1))
 
-#Get cluster order to paste into Excel
-writeClipboard(rownames(cplot))
+# Get cluster order to paste into Excel
+# writeClipboard(rownames(cplot))
 
 # Manhattan plot ----
 
