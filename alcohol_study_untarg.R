@@ -39,7 +39,7 @@ points(matched_neg$Pcor.x, matched_neg$Pcor.y, xlab = "Correlation CS", ylab = "
 
 # Approach 2: Match significant CS features with all HCC ----
 
-# Get significant CS features and extract feature table number
+# Get significant CS features and extract feature table number (filtered 75% present)
 pos_cs <- intakecor_cs(food = "Qe_Alc", incr = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
 neg_cs <- intakecor_cs(food = "Qe_Alc", incr = F, pos = F, min.sample = 250, pcutoff = 0.05, matchvec = NULL)
 filt1 <- pos_cs$feat
@@ -51,7 +51,7 @@ matched_neg_filt <- CS_HCC_match(mode = "neg", filt = filt2)
 f1 <- matched_pos_filt$HCC_feat
 f2 <- matched_neg_filt$HCC_feat
 
-# Run correlations on subset
+# Run correlations on subset (filtered 50% present)
 pos_hcc <- intakecor_hcc(matchvec = f1)
 neg_hcc <- intakecor_hcc(pos = F, matchvec = f2)
 
