@@ -25,7 +25,7 @@ baselines <- function(x) {
   
   #data frame of positive baseline levels
   sampno <- posname %>% str_match_all("[0-9]+") %>% unlist %>% as.numeric
-  posbl <- posname %>% str_match("corr|raw")
+  posbl  <- posname %>% str_match("corr|raw")
   posdf  <- data_frame(sampno, posbl = posbl[-(1:5)])
   
   bl <- merge(negdf, posdf, by="sampno", all.x = T)
@@ -71,15 +71,17 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 
   ### Read and process metabolomics data ------------------------------------------------------------
   
-  if(pos == T) {  
-    ion.mode <- "Pos"
+  if (pos == T) {  
+    ion.mode      <- "Pos"
     meta$baseline <- baselines$pos.bl
-    pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    pt            <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchpos, ]
-      } else { 
-    ion.mode <- "Neg"
+    
+    } else { 
+      
+    ion.mode      <- "Neg"
     meta$baseline <- baselines$neg.bl
-    pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    pt            <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchneg, ]
   }
 

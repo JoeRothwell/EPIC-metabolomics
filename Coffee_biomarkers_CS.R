@@ -5,18 +5,18 @@
 
 coffee_markers_cs <- function() {
   library(tidyverse)
-  meta    <- read.csv("data/cs_metadata.csv")
-  alc_g   <- read.csv("alcohol/alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI)
+  meta    <- read.csv("cs_metadata.csv")
+  alc_g   <- read.csv("alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI)
   cupvols <- data.frame(country = levels(meta$country), cupvol = c(146.59, 209.32, 135.48, 55.2))
   meta    <- meta %>% left_join(cupvols, by="country") %>% mutate(cups = cof/cupvol)
   
   meta    <- meta %>% left_join(alc_g, by="Idepic")
   
   #Read in extra data for cyclo(prolyl-valyl)
-  cyclo <- read_csv("data/CS cyclo pro val.csv") %>% slice(1)
+  cyclo <- read_csv("CS cyclo pro val.csv") %>% slice(1)
   
   #read in pos and neg data for 10 biomarkers extracted in ProFinder. pos data:
-  pos <- read_csv("data/CS 7 compounds pos.csv") %>% bind_rows(cyclo) %>% 
+  pos <- read_csv("CS 7 compounds pos.csv") %>% bind_rows(cyclo) %>% 
     select("Compound Name", contains("Area")) %>% t
   colnames(pos) <- pos[ 1, ]
   pos           <- pos[-1, ]
@@ -25,7 +25,7 @@ coffee_markers_cs <- function() {
     separate(ID, into = c("Area", "datafile"), sep = " ", convert = T)
   
   #neg data
-  neg <- read_csv("data/CS 3 compounds neg.csv") %>% select("Compound Name", contains("Area")) %>% t
+  neg <- read_csv("CS 3 compounds neg.csv") %>% select("Compound Name", contains("Area")) %>% t
   colnames(neg) <- neg[ 1, ]
   neg           <- neg[-1, ]
   
@@ -35,9 +35,9 @@ coffee_markers_cs <- function() {
   #Join pos and neg data together, add metadata and filter subjects only
   
   posneg <- inner_join(pos.df, neg.df, by = "datafile") %>% 
-    mutate(datalab = paste(datafile, "(raw)", sep=""))
+    mutate(datalabel = paste(datafile, "(raw)", sep=""))
   
-  wide <- inner_join(meta, posneg, by="datalab") %>% filter(stype == "SA" & present.pos == T) %>%
+  wide <- inner_join(meta, posneg, by="datalabel") %>% filter(stype == "SA" & present.pos == T) %>%
     select(-Area.x, -Area.y)
   
   #Convert metabolite intensities to numeric. %<>% operator pipes and reassigns
@@ -56,7 +56,7 @@ coffee_markers_cs <- function() {
             AAMU            = `5-Acetylamino-6-amino-3-methyluracil (AAMU)`)
   
   #Remove hippuric acid, cyclo(leu-pro) and theophylline  
-  output <- wide %>% select(-`Cyclo_leu_pro`, -Hippuric_acid, -Theophylline)
+  #output <- wide %>% select(-`Cyclo_leu_pro`, -Hippuric_acid, -Theophylline)
 }
 wide <- coffee_markers_cs()
 

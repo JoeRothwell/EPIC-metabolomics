@@ -7,14 +7,14 @@ coffee4hcc <- function(){
   cycloproval <- read_csv("data/Cyclo pro val HCC data_1.csv") %>% slice(1)
 
   #pos mode data
-  pos <- read_csv("data/Coffee 8 pos biomarkers HCC data.csv") %>% bind_rows(cycloproval) %>% 
+  pos <- read_csv("Coffee 8 pos biomarkers HCC data.csv") %>% bind_rows(cycloproval) %>% 
     select("Compound Name", contains("Area")) %>% t
   colnames(pos) <- pos[1, ]
   pos           <- pos[-1, ]
   pos.samp      <- pos[1:258, ]
 
   #neg mode data
-  neg <- read_csv("data/Coffee 2 neg biomarkers HCC data.csv") %>% select("Compound Name", contains("Area")) %>% t
+  neg <- read_csv("Coffee 2 neg biomarkers HCC data.csv") %>% select("Compound Name", contains("Area")) %>% t
   colnames(neg) <- neg[1, ]
   neg           <- neg[-1, ]
   neg.samp      <- neg[1:258, ]
