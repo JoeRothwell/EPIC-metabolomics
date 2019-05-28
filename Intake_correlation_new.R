@@ -46,14 +46,14 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
-  baselines <- readRDS("prepdata/baselines pos neg.rds")
+  baselines <- readRDS("baselines pos neg.rds")
   
   ### Define and process sample metadata (food, lifestyle, technical). Get alcohol (g) and BMI data
-  alc_g <- read.csv("alcohol/alcohol.csv") %>% select(Idepic, Country=country, Qe_Alc, R_BMI)
+  alc_g <- read.csv("alcohol.csv") %>% select(Idepic, Country=country, Qe_Alc, R_BMI)
   cupvol <- data.frame(country = levels(alc_g$Country), cupvol = c(146.59, 209.32, 135.48, 55.2))
   
   # Read in main metadata, add alcohol and BMI data and log transformed intakes
-  meta  <- read.csv("data/cs_metadata.csv") %>% left_join(alc_g, by="Idepic") %>% 
+  meta  <- read.csv("cs_metadata.csv") %>% left_join(alc_g, by="Idepic") %>% 
     left_join(cupvol, by = "country") %>% mutate(cups = cof/cupvol)
   
   # Filter the 498 obs to get the 451 measured subjects only (excluding 204 and 355 not properly injected in pos)
@@ -64,12 +64,12 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   if(pos == T) {  
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
-    pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
-    pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchneg, ]
   }
   
@@ -342,11 +342,15 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
   if(study == "cs") v1 <- unique(joindf$CS_feat) else if (study == "hcc") v1 <- unique(joindf$HCC_feat)
 } 
 
+# Coffee models for paper
+cofpos <- intakecor_cs(incr = T, pcutoff = 0.05)
+cofneg <- intakecor_cs(incr = T, pos = F, pcutoff = 0.05)
+
 # Correlation heatmap ----
 corrdata <- function(posdisc, negdisc) {
-  ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-  ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-  meta  <- read.csv("data/cs_metadata.csv")
+  ptpos <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+  ptneg <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+  meta  <- read.csv("cs_metadata.csv")
   
   # Subset samples and features by filtering
   samples <- meta$present.pos == T & meta$stype == "SA" 
@@ -378,7 +382,7 @@ corrdata <- function(posdisc, negdisc) {
   colnames(cormat) <- NULL
   return(cormat)
 }
-# cormat <- corrdata(cofpos, cofneg)
+cormat <- corrdata(cofpos, cofneg)
 
 library(corrplot)
 cplot <- corrplot(cormat, method = "square", tl.col = "black", order = "hclust", 
@@ -393,7 +397,7 @@ cplot <- corrplot(cormat, method = "square", tl.col = "black", order = "hclust",
 manhattandata <- function() {
   library(tidyverse)
   library(RColorBrewer)
-  cof <- readRDS("prepdata/Coffee_features_Manhattan.rds")
+  cof <- readRDS("Coffee_features_Manhattan.rds")
   
   # Vector of colours for stripes, length 5934
   colvec <- rep(c("col1", "col2"), 6, each = 500)[1:nrow(cof)]

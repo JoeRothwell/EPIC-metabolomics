@@ -49,14 +49,14 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
 
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
-  baselines <- readRDS("prepdata/baselines pos neg.rds")
+  baselines <- readRDS("baselines pos neg.rds")
 
   ### Define and process sample metadata (food, lifestyle, technical) ###
   #Get alcohol (g) and BMI data
-  alc_g <- read.csv("alcohol/alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI)
+  alc_g <- read.csv("alcohol.csv") %>% select(Idepic, Qe_Alc, R_BMI)
 
   # Read in main metadata, add alcohol and BMI data and log transformed intakes
-  meta  <- read.csv("data/cs_metadata.csv") %>% 
+  meta  <- read.csv("cs_metadata.csv") %>% 
            left_join(alc_g, by="Idepic") %>%
            mutate(logcof = log(cof + 1), logalc = log(alcbev + 1), logredmeat = log(redmeat + 1),
            logprocmeat = log(procmeat + 1), logfish = log(fish + 1), logQe_Alc = log(Qe_Alc + 1))
@@ -74,14 +74,14 @@ intake.corr <- function(food, pos = T, incr = T, impute = F, min.sample = 340, p
   if (pos == T) {  
     ion.mode      <- "Pos"
     meta$baseline <- baselines$pos.bl
-    pt            <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    pt            <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchpos, ]
     
     } else { 
       
     ion.mode      <- "Neg"
     meta$baseline <- baselines$neg.bl
-    pt            <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    pt            <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchneg, ]
   }
 
@@ -205,12 +205,14 @@ cofpos <- intake.corr("logcof", incr = T, pcutoff = 0.05)
 cofneg <- intake.corr("logcof", incr = T, pos = F, pcutoff = 0.05)
 
 # Coffee, cups, not increasing (for Manhattan set incr to F and pcutoff to 1)
+# Warning: no longer works and not used in analysis
 cofpos <- intake.corr("cups", incr = F, impute = F, pcutoff = 1)
 cofneg <- intake.corr("cups", incr = F, pos = F, pcutoff = 1)
 cof    <- cofpos %>% bind_rows(cofneg) %>% arrange(-Pcor)
 #saveRDS(disc.cof, file="Coffee features Manhattan.rds")
 
 #2. Alcohol grams consumed, no increasing filter, missings not imputed:
+# Warning: no longer works, replaced by alcohol_study_untarg.R
 alcpos <- intake.corr("logQe_Alc", pos = T, incr = F, impute = F, min.sample = 225, pcutoff = 0.05)
 alcneg <- intake.corr("logQe_Alc", pos = F, incr = F, impute = F, min.sample = 225, pcutoff = 0.05)
 alc   <- alcpos %>% bind_rows(alcneg) %>% arrange(-Pcor)
@@ -218,15 +220,15 @@ alc   <- alcpos %>% bind_rows(alcneg) %>% arrange(-Pcor)
 ### Correlation heatmap ----------------------------------------------------------------------
 
 ### Read in feature tables ###
-ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+ptpos <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+ptneg <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
 
 ptpos <- ptpos[, sampvec ]
 ptneg <- ptneg[, sampvec ]
 
 #merge pos and neg data
 disctbl <- rbind(cofpos, cofneg)
-saveRDS(disctble, file="coffee_corr_features.rds")
+# saveRDS(disctble, file="coffee_corr_features.rds")
 
 posfilt <- rowSums(ptpos > 1) > 340 #gives logical vector 
 negfilt <- rowSums(ptneg > 1) > 340
@@ -234,14 +236,14 @@ posmat <- ptpos[ posfilt, ]
 negmat <- ptneg[ negfilt, ]
 
 #subset by discriminant feature number
-discmatpos <- posmat[ cofpos1$feat,  ] %>% t
-discmatneg <- negmat[ cofneg1$feat,  ] %>% t
+discmatpos <- posmat[ cofpos$feat,  ] %>% t
+discmatneg <- negmat[ cofneg$feat,  ] %>% t
 
 discmat <- cbind(discmatpos, discmatneg)
 
 #filter the original peak table (for extraction of feature data)
-ptpos <- ptpos[cofpos1$feat, ]
-ptneg <- ptneg[cofneg1$feat, ]
+ptpos <- ptpos[cofpos$feat, ]
+ptneg <- ptneg[cofneg$feat, ]
 
 #log2 transform data and make colnames
 logmat   <- log2(discmat)
@@ -262,7 +264,7 @@ writeClipboard(rownames(cplot))
 ### Manhattan plot for coffee updated for new pos and neg data ---------------------------------------
 #Load features with partial correlations
 library(tidyverse)
-disc.cof <- readRDS("Coffee features Manhattan.rds")
+disc.cof <- readRDS("Coffee_features_Manhattan.rds")
 
 #Make colour vector for stripes, 5934 features
 colvec   <- c(rep(c(rep("col1", 500), rep("col2", 500)), 5), rep("col1", 500), rep("col2", 434))
@@ -286,19 +288,19 @@ df <- disc.cof %>% arrange(RT) %>%
 #Call to ggplot (customise as needed)
 #For publication, reduce point size and font size
 library(ggplot2)
-#ggplot(df, aes(x = order, y = absPcor, colour = signif2)) + 
-ggplot(df, aes(x = order, y = -log10(rawp), colour = signif2, shape = signif3)) +
+ggplot(df, aes(x = order, y = absPcor, colour = signif2)) + 
+#ggplot(df, aes(x = order, y = -log10(rawp), colour = signif2, shape = signif3)) +
   geom_hline(yintercept = c(0.2, 0.4), linetype = c("solid"), colour = "grey") +
   #geom_hline(yintercept = c(-log10(0.05), -log10(0.9953192)), linetype = "dashed", colour = "black") +
   geom_point(size = 1) + theme_bw(base_size = 10) +
-  #scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
-  scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
+  scale_colour_manual(values = c("darkgrey", "black", "red", "blue")) +
+  #scale_colour_manual(values = c("darkgrey", "black", "black", "black")) +
   scale_shape_manual(values = c(1, 16)) + 
   scale_x_continuous(name = "Elution order (increasing lipophilicity)", expand = c(0.02,0)) +
   scale_y_continuous(name = "Partial Pearson correlation coefficient", expand = c(0.01, 0.01)) +
   #scale_y_continuous(name = "-log10(pvalue)", expand = c(0.01, 0.01)) +
   geom_text(aes(label = mz2), hjust = -0.1, vjust = 0, size = 1.5, colour = "black") +
-  #geom_hline(yintercept = -0.00, colour = "white", size = 2) +
+  geom_hline(yintercept = -0.00, colour = "white", size = 2) +
   theme(legend.position = "none", 
         text = element_text(size=8),
         panel.grid.major = element_blank(), 
