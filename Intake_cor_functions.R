@@ -42,18 +42,19 @@ baselines <- function() {
 #bl <- baselines()
 
 # Functions for intake correlation
-intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, min.sample = 340, model = T, matchvec = NULL) {
+intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 0.05, 
+                         min.sample = 340, model = T, matchvec = NULL) {
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
-  baselines <- readRDS("prepdata/baselines pos neg.rds")
+  baselines <- readRDS("baselines pos neg.rds")
   
   ### Define and process sample metadata (food, lifestyle, technical). Get alcohol (g) and BMI data
-  alc_g <- read.csv("alcohol/alcohol.csv") %>% select(Idepic, Country=country, Qe_Alc, R_BMI)
+  alc_g <- read.csv("alcohol.csv") %>% select(Idepic, Country=country, Qe_Alc, R_BMI)
   cupvol <- data.frame(country = levels(alc_g$Country), cupvol = c(146.59, 209.32, 135.48, 55.2))
   
   # Read in main metadata, add alcohol and BMI data and log transformed intakes
-  meta  <- read.csv("data/cs_metadata.csv") %>% left_join(alc_g, by="Idepic") %>% 
+  meta  <- read.csv("cs_metadata.csv") %>% left_join(alc_g, by="Idepic") %>% 
     left_join(cupvol, by = "country") %>% mutate(cups = cof/cupvol)
   
   # Filter the 498 obs to get the 451 measured subjects only (excluding 204 and 355 not properly injected in pos)
@@ -64,12 +65,12 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   if(pos == T) {  
     ionmode <- "Pos"
     meta$baseline <- baselines$pos.bl
-    pt <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchpos, ]
   } else { 
     ionmode <- "Neg"
     meta$baseline <- baselines$neg.bl
-    pt <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+    pt <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
     #pt <- pt[CSmatchneg, ]
   }
   
@@ -204,11 +205,11 @@ intakecor_hcc <- function(pos = T, matchvec = NULL) {
   library(tidyverse)
   if(pos == T) {
     ionmode <- "Pos"
-    ft <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% slice(-(83:84))
+    ft <- read_csv("EPIC liver cancer 2016 RP POS feature table.csv") %>% slice(-(83:84))
     #ft <- ft[HCCmatchpos, ]
   } else {
     ionmode <- "Neg"
-    ft <- read_csv("data/EPIC liver cancer 2016 RP NEG feature table.csv")
+    ft <- read_csv("EPIC liver cancer 2016 RP NEG feature table.csv")
     #ft <- ft[HCCmatchneg, ]
   }
   
@@ -229,7 +230,7 @@ intakecor_hcc <- function(pos = T, matchvec = NULL) {
   # Metadata is from Laura's SAS file
   # As for intensities, split ID to get a code for joining
   library(haven)
-  meta <- read_sas("data/newdataset_missings1.sas7bdat") %>% select(-starts_with("Untarg_")) %>%
+  meta <- read_sas("newdataset_missings1.sas7bdat") %>% select(-starts_with("Untarg_")) %>%
     separate(Id_Bma, sep = "_", into=c("id1", "id2"), convert = T) %>% arrange(id2)
   
   # Get vector of controls for subsetting
@@ -304,7 +305,8 @@ intakecor_hcc <- function(pos = T, matchvec = NULL) {
 }  
 
 # For CS - HCC matching
-CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "neg"), filt = NULL) {
+CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "neg"), 
+                         filt = NULL) {
   
   library(haven)
   library(tidyverse)
@@ -313,14 +315,14 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
   # Pos or neg mode for CS and HCC
   
   if(mode == "pos") {
-    cs <- read_tsv("data/EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
-    hcc <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% 
+    cs <- read_tsv("EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("EPIC liver cancer 2016 RP POS feature table.csv") %>% 
       select(1) %>% slice(-(83:84)) %>% mutate(HCC_feat = 1:n())
     
   } else if (mode == "neg") {
     
-    cs <- read_tsv("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
-    hcc <- read_csv("data/EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
+    cs <- read_tsv("EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
       select(1) %>% mutate(HCC_feat = 1:n())
   }
   
@@ -344,9 +346,9 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
 
 # Correlation heatmap ----
 corrdata <- function(posdisc, negdisc) {
-  ptpos <- read.delim("data/EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
-  ptneg <- read.delim("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
-  meta  <- read.csv("data/cs_metadata.csv")
+  ptpos <- read.delim("EPIC Cross sectional RP POS Feature table.txt", skip=4, row.names = 1)
+  ptneg <- read.delim("EPIC Cross sectional RP NEG Feature table.txt", skip=4, row.names = 1)
+  meta  <- read.csv("cs_metadata.csv")
   
   # Subset samples and features by filtering
   samples <- meta$present.pos == T & meta$stype == "SA" 
