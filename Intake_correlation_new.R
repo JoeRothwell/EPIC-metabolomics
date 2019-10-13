@@ -2,7 +2,7 @@
 # Coffee QGE130301; Red meat QGE0701; Fish QGE0801; Fruits, nuts and seeds QGE04; Alc beverages QGE14;
 # Beer 140301; Total dietary fibre QEFIBT
 
-# Function for baseline correction
+# Function for baseline correction (note: following functions use saved baselines object)
 baselines <- function() {
   
   #calculation of raw and corrected peaks for new data 4-4-2017
@@ -83,25 +83,24 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   #replace matrix zeros or NAs with 1s
   mat <- ifelse(mat == 0 | is.na(mat), 1, mat)
   
-  #filter features present in less than 300 samples
+  # Feature filters ----
+  
+  # 1. Keep features present in more than n samples only
   filt <- colSums(mat > 1) > min.sample
   mat  <- mat[ , filt]
   
-  #filter the original peak table (for extraction of feature data)
-  pt.subset <- pt[filt, sampvec]
-  
-  ### Read and process metadata ------------------------------------------------------------
-  
-  #subset 451 samples only (stype = SA)
+  # subset 451 samples only (stype = SA)
   labs <- meta[meta$present.pos == T & meta$stype == "SA", ]
   
-  #Create food intake object, get quartiles and define intake categories
+  # 2. Keep features that are increasing
+  
+  # Create food intake object, get quartiles and define intake categories
   foodcol <- labs[, food]
   qfood   <- quantile(foodcol, na.rm = T)
   cats    <- cut(foodcol, qfood, include.lowest = T)
   
   qmeds <- aggregate(mat, list(classes=cats), median)
-  #get features which increase by cof cons quartile (with conditions)
+  # get features which increase by cof cons quartile (with conditions)
   increasing <- 
     function(x) { which.max(x) == 4 &               # highest must be quartile 4
         (which.min(x) == 1 | which.min(x) == 2) &   # lowest must be Q1 or Q2
@@ -109,31 +108,32 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   
   if(incr == T) ind <- apply(as.matrix(qmeds[, -1]), 2, increasing) else ind <- as.logical(1: (ncol(qmeds) - 1))
   
-  #subset increasing only if necessary
+  # subset increasing only if necessary
   #filtmat <- if(incr == T) mat[, ind] else filtmat <- mat
   filtmat <- mat[, ind]
   
-  #impute missings with half minimum value
+  # Get median intensities and count detections for each feature
+  medint <- round(apply(mat[, ind], 2, median))
+  detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
+  
+  ### Correlation and partial correlation ###-------------------------
+  
+  # Prepare data: impute missings with half minimum value and log transform
   library(zoo)
   if(impute == T) filtmat <- na.aggregate(filtmat, FUN = function(x) min(x)/2 )
-  
-  #subset increasing only and log transform
   logmat <- log2(filtmat)
-  
   if(model == F) return(logmat)
   
   print(paste("Testing", ncol(logmat), "features..."))
   
-  ### Correlation and partial correlation ###-------------------------
-  
-  #correlation test food intake with intensities of selected features
+  # correlation test food intake with intensities of selected features
   lcor <- apply(logmat, 2, function(x) cor.test(foodcol[x > 0], x[x > 0])  )
   
-  #get raw correlation coefficients
+  # get raw correlation coefficients
   rcor <- unlist(sapply(lcor, "[", 4))
   rawp <- p.adjust(unlist(sapply(lcor, "[", 3)), method = "BH")
   
-  #with purrr
+  # with purrr
   # rawcor <- map_dfr(lcor, tidy, .id = "feature") %>% mutate(p.valueBH = p.adjust(p.value, method = "BH"))
   
   #partial correlation controlling for covariates
@@ -169,6 +169,9 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   
   ### Extract feature data ---------------------------------------------------------------------
   
+  # filter the original peak table (for extraction of feature data)
+  pt.subset <- pt[filt, sampvec]
+  
   # get mass and RT from peak table and add a feature number for joining. First round cols
   splitcol <- rownames_to_column(pt.subset, var = "ID") %>%  select(ID) %>%
     separate(ID, into = c("Mass", "RT"), sep = "@", convert = T) 
@@ -182,10 +185,6 @@ intakecor_cs <- function(food = "cof", pos = T, incr = T, impute = F, pcutoff = 
   # Subset mass and RT for increasing features
   #if(incr == T) massRT <- disc[ind, ] else massRT <- disc
   massRT <- disc[ind, ]
-  
-  # Get median intensities and count detections for each feature
-  medint <- round(apply(mat[, ind], 2, median))
-  detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
   
   # Get IDs of matched features
   #CS.feat <- if(pos == T) CSmatchpos[filt] else CSmatchneg[filt]
