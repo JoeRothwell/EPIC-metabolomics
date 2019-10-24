@@ -50,7 +50,7 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
-  baselines <- readRDS("baselines pos neg.rds")
+  bl <- readRDS("baselines_pos_neg.rds")
   
   ### Define and process sample metadata (food, lifestyle, technical). Get alcohol (g) and BMI data
   alc_g <- read.csv("alcohol.csv") %>% select(Idepic, Country=country, Qe_Alc, R_BMI)
@@ -66,7 +66,7 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   ### Read and process metabolomics data ------------------------------------------------------------
   
   if(nrow(dat) == 5658) ionmode <- "Pos" else ionmode <- "Neg"
-  if(nrow(dat) == 5658) meta$baseline <- baselines$pos.bl else meta$baseline <- baselines$neg.bl
+  if(nrow(dat) == 5658) meta$baseline <- bl$pos.bl else meta$baseline <- bl$neg.bl
   
   # Subset by a vector of features if needed
   if(!is.null(matchvec)) dat <- dat[matchvec, ] else dat
@@ -85,53 +85,42 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   mat  <- mat[ , filt]
 
   # subset 451 samples only (stype = SA)
-  labs <- meta[meta$present.pos == T & meta$stype == "SA", ]
+  labs <- meta %>% filter(present.pos == T & stype == "SA")
   
-  # 2. Keep features that are increasing
-  
-  # Create food intake object, get quartiles and define intake categories
+  # 2. Keep features that are increasing. Get quartiles and define intake categories
   foodcol <- labs[, food]
-  qfood   <- quantile(foodcol, na.rm = T)
-  cats    <- cut(foodcol, qfood, include.lowest = T)
+  cats <- cut_number(foodcol, 4)
+  qmeds <- data.frame(cats, mat) %>% group_by(cats) %>% summarise_all(median)
   
-  qmeds <- aggregate(mat, list(classes=cats), median)
   # get features which increase by cof cons quartile (with conditions)
   increasing <- 
     function(x) { which.max(x) == 4 &               # highest must be quartile 4
         (which.min(x) == 1 | which.min(x) == 2) &   # lowest must be Q1 or Q2
         x[3] > x[1] }                               # Q3 must be greater than Q1
-  
-  if(incr == T) ind <- apply(as.matrix(qmeds[, -1]), 2, increasing) else ind <- as.logical(1: (ncol(qmeds) - 1))
-  
-  # subset increasing only if necessary
-  #filtmat <- if(incr == T) mat[, ind] else filtmat <- mat
-  filtmat <- mat[, ind]
+
+  # subset increasing only if necessary  
+  ind <- map_lgl(qmeds[, -1], increasing)
+  filtmat <- if(incr == T) mat[, ind] else filtmat <- mat
   
   # Get median intensities and count detections for each feature
-  medint <- round(apply(mat[, ind], 2, median))
-  detect <- apply(mat[, ind], 2, function(x) sum(x > 1))
+  medint <- round(apply(filtmat, 2, median))
+  detect <- apply(filtmat, 2, function(x) sum(x > 1))
   
   ### Correlation and partial correlation. First impute and log data
   library(zoo)
   if(impute == T) filtmat <- na.aggregate(filtmat, FUN = function(x) min(x)/2 )
+  
   logmat <- log2(filtmat)
   
   if(model == F) return(logmat)
   print(paste("Testing", ncol(logmat), "features..."))
   
   # correlation test food intake with intensities of selected features
+  print(paste("Correlation with", food))
   lcor <- apply(logmat, 2, function(x) cor.test(foodcol[x > 0], x[x > 0])  )
   
-  # get raw correlation coefficients
-  rcor <- unlist(sapply(lcor, "[", 4))
-  rawp <- p.adjust(unlist(sapply(lcor, "[", 3)), method = "BH")
-  
-  # with purrr
-  # rawcor <- map_dfr(lcor, tidy, .id = "feature") %>% mutate(p.valueBH = p.adjust(p.value, method = "BH"))
-  
-  #partial correlation controlling for covariates
+  # partial correlation controlling for covariates
   #define function to apply to food and intensity data. Change food and covariates as required
-  
   partialcor <- function(x) {
     #All obs are passed but logcof automatically has NAs removed and is also subset for nonzero cons
     ## cups or volume
@@ -149,21 +138,25 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
     }
     cor.test(residuals(mod1), residuals(mod2))
   }
-  
-  # apply function across matrix and extract p-values
-  print(paste("Correlation with", food))
   lpcor <- apply(logmat, 2, partialcor)
+  
+  #browser()
+  
+  # get raw correlation coefficients
+  rcor <- unlist(sapply(lcor, "[", 4))
+  rawp <- p.adjust(unlist(sapply(lcor, "[", 3)), method = "BH")
   Pcor  <- unlist(sapply(lpcor, "[", 4))
   pval  <- p.adjust(unlist(sapply(lpcor, "[", 3)), method = "BH")
-  
-  # pcor <- map_dfr(lpcor, tidy, .id = "feature") %>% mutate(p.valueBH = p.adjust(p.value, method = "BH"))
+
+  # with purrr
+  #rawcor <- map_dfr(lcor, tidy, .id = "feature") 
+  #parcor <- map_dfr(lpcor, tidy, .id = "feature") 
   
   ### Extract feature metadata ---------------------------------------------------------------------
   
   # Separate mass and RT from metabolomics matrix names
   spl <- str_split(colnames(mat), pattern = "@", simplify = T)
   splitcol <- data.frame("Mass" = as.numeric(spl[, 1]), "RT" = as.numeric(spl[, 2]))
-  #colnames(splitcol) <- c("Mass", "RT")
 
   disc <- splitcol %>% mutate(mode = ionmode, feat = (1:nrow(dat))[filt] ) %>% 
     select(mode, Mass, RT, feat)
@@ -174,7 +167,7 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   # Subset mass and RT for increasing features
   #if(incr == T) massRT <- disc[ind, ] else massRT <- disc
   massRT <- disc[ind, ]
-  mat.filt <- t(mat[, ind])
+  mat.filt <- t(filtmat)
   
   # Get IDs of matched features
   #CS.feat <- if(pos == T) CSmatchpos[filt] else CSmatchneg[filt]
