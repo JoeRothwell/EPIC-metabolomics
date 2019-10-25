@@ -46,7 +46,8 @@ baselines <- function() {
 #bl <- baselines()
 
 # Functions for intake correlation
-intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05, minsamp = 340, model = T, matchvec = NULL) {
+intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05, 
+                         minsamp = 340, model = T, new = F, matchvec = NULL) {
   
   require(tidyverse)
   #see baseline correction.R for details of baseline co-variate
@@ -103,19 +104,20 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   filtmat <- if(incr == T) mat[, ind] else filtmat <- mat
   
   # Get median intensities and count detections for each feature
-  medint <- round(apply(filtmat, 2, median))
+  medint <- apply(filtmat, 2, median)
   detect <- apply(filtmat, 2, function(x) sum(x > 1))
+  
+  md <- tibble(medint = apply(filtmat, 2, median), 
+               detect = apply(filtmat, 2, function(x) sum(x > 1)))
   
   ### Correlation and partial correlation. First impute and log data
   library(zoo)
   if(impute == T) filtmat <- na.aggregate(filtmat, FUN = function(x) min(x)/2 )
-  
   logmat <- log2(filtmat)
-  
   if(model == F) return(logmat)
-  print(paste("Testing", ncol(logmat), "features..."))
   
   # correlation test food intake with intensities of selected features
+  print(paste("Testing", ncol(logmat), "features..."))
   print(paste("Correlation with", food))
   lcor <- apply(logmat, 2, function(x) cor.test(foodcol[x > 0], x[x > 0])  )
   
@@ -140,8 +142,6 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   }
   lpcor <- apply(logmat, 2, partialcor)
   
-  #browser()
-  
   # get raw correlation coefficients
   rcor <- unlist(sapply(lcor, "[", 4))
   rawp <- p.adjust(unlist(sapply(lcor, "[", 3)), method = "BH")
@@ -149,8 +149,15 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   pval  <- p.adjust(unlist(sapply(lpcor, "[", 3)), method = "BH")
 
   # with purrr
-  #rawcor <- map_dfr(lcor, tidy, .id = "feature") 
-  #parcor <- map_dfr(lpcor, tidy, .id = "feature") 
+  library(broom)
+  rcor <- map_dfr(lcor, tidy, .id = "feat") %>% separate(feat, sep = "@", into = c("Mass", "RT"))
+  pcor <- map_dfr(lpcor, tidy, .id = "feat") %>% 
+    mutate(p.valBH = p.adjust(p.value, method = "BH")) %>% select(estimate, p.value, p.valBH)
+
+  # Final partial correlation is called estimate1  
+  output0 <- bind_cols(rcor, pcor, md) %>% bind_cols(data.frame(t(filtmat))) %>% 
+    filter(p.valBH < 0.05)
+  if(new == T) return(output0)
   
   ### Extract feature metadata ---------------------------------------------------------------------
   
@@ -158,14 +165,15 @@ intakecor_cs <- function(dat, food = "cof", incr = T, impute = F, pcutoff = 0.05
   spl <- str_split(colnames(mat), pattern = "@", simplify = T)
   splitcol <- data.frame("Mass" = as.numeric(spl[, 1]), "RT" = as.numeric(spl[, 2]))
 
-  disc <- splitcol %>% mutate(mode = ionmode, feat = (1:nrow(dat))[filt] ) %>% 
+  disc <- splitcol %>% 
+    mutate(mode = ionmode, feat = (1:nrow(dat))[filt] ) %>% 
     select(mode, Mass, RT, feat)
   
   # Give pos and neg mode data unique feature numbers. Neg numbers start from 10000
   if(nrow(dat) == 5658) disc <- disc %>% mutate(feat1 = feat) else disc <- disc %>% mutate(feat1 = feat + 10000)
   
   # Subset mass and RT for increasing features
-  #if(incr == T) massRT <- disc[ind, ] else massRT <- disc
+  if(incr == T) massRT <- disc[ind, ] else massRT <- disc
   massRT <- disc[ind, ]
   mat.filt <- t(filtmat)
   
@@ -325,8 +333,8 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
 } 
 
 # Coffee models for paper
-cofpos <- intakecor_cs(ptpos, incr = T, pcutoff = 0.05)
-cofneg <- intakecor_cs(ptneg, incr = T, pcutoff = 0.05)
+cofpos1 <- intakecor_cs(ptpos, incr = T, pcutoff = 0.05, new = T)
+cofneg1 <- intakecor_cs(ptneg, incr = T, pcutoff = 0.05)
 # or
 output <- lapply(list(ptpos, ptneg), intakecor_cs)
 
