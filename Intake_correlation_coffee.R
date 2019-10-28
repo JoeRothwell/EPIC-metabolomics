@@ -266,14 +266,14 @@ CS_HCC_match <- function(RTtol = 0.1, study = c("cs", "hcc"), mode = c("pos", "n
   # Pos or neg mode for CS and HCC
   
   if(mode == "pos") {
-    cs <- read_tsv("data/EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
-    hcc <- read_csv("data/EPIC liver cancer 2016 RP POS feature table.csv") %>% 
+    cs <- read_tsv("EPIC Cross sectional RP POS Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("EPIC liver cancer 2016 RP POS feature table.csv") %>% 
       select(1) %>% slice(-(83:84)) %>% mutate(HCC_feat = 1:n())
     
   } else if (mode == "neg") {
     
-    cs <- read_tsv("data/EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
-    hcc <- read_csv("data/EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
+    cs <- read_tsv("EPIC Cross sectional RP NEG Feature table.txt", skip=4) %>% select(1) %>% mutate(CS_feat = 1:n())
+    hcc <- read_csv("EPIC liver cancer 2016 RP Neg Feature Table.csv") %>% 
       select(1) %>% mutate(HCC_feat = 1:n())
   }
   
