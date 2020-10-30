@@ -1,89 +1,145 @@
 # Coffee biomarker data from Profinder for HCC study. Read in data generated from Profinder
 # All samples, blanks and QCs
-
-# Data preparation ----
 library(tidyverse)
-coffee4hcc <- function(){
-  cycloproval <- read_csv("data/Cyclo pro val HCC data_1.csv") %>% slice(1)
 
-  #pos mode data
-  pos <- read_csv("Coffee 8 pos biomarkers HCC data.csv") %>% bind_rows(cycloproval) %>% 
-    select("Compound Name", contains("Area")) %>% t
-  colnames(pos) <- pos[1, ]
-  pos           <- pos[-1, ]
-  pos.samp      <- pos[1:258, ]
+# Metadata and compound data
+hcc <- read_sas("merged_untarg1.sas7bdat") 
+lf <- read_sas("live_caco1.sas7bdat")
+cof <- readRDS("Coffee intakes all EPIC.rds")
+cyc <- read_csv("Cyclo pro val HCC data_1.csv") %>% slice(1)
+pos <- read_csv("Coffee 8 pos biomarkers HCC data.csv")
+neg <- read_csv("Coffee 2 neg biomarkers HCC data.csv")
 
-  #neg mode data
-  neg <- read_csv("Coffee 2 neg biomarkers HCC data.csv") %>% select("Compound Name", contains("Area")) %>% t
-  colnames(neg) <- neg[1, ]
-  neg           <- neg[-1, ]
-  neg.samp      <- neg[1:258, ]
+pos <- pos %>% bind_rows(cyc) %>% select("Compound Name", contains("Area")) %>% t
+colnames(pos) <- pos[1, ]
+pos           <- pos[-1, ]
+pos.samp      <- pos[1:258, ]
 
-  #get labID (same for pos and neg), first 258 observations are controls
-  sampnames <- rownames(neg)[1:258]
-  LabIDs    <- data.frame(ID = sampnames) %>% 
-  separate(ID, into = c("other", "other2", "LabID", "No"), sep=c(31,41,51))
+neg <- neg %>% select("Compound Name", contains("Area")) %>% t
+colnames(neg) <- neg[1, ]
+neg           <- neg[-1, ]
+neg.samp      <- neg[1:258, ]
 
-  #add LabID as rownames and merge pos and neg biomarkers
-  all.samp           <- cbind(LabID = LabIDs$LabID, pos.samp, neg.samp)
-  rownames(all.samp) <- NULL
-  all.samp           <- as.tibble(all.samp)
-  #all.samp2          <- lapply(all.samp, FUN=as.numeric) %>% data.frame
+#get labID (same for pos and neg), first 258 observations are controls
+sampnames <- rownames(neg)[1:258]
+LabIDs    <- data.frame(ID = sampnames) %>% 
+separate(ID, into = c("other", "other2", "LabID", "No"), sep=c(31,41,51))
 
-  #Get metadata. Read in from uncompressed SAS file and subset subject metadata
-  library(haven)
-  hcc <- read_sas("data/merged_untarg1.sas7bdat") %>% 
-    select(Id_Bma, Idepic_Samp:alc_drinker_m) %>%
-    separate("Id_Bma", into = c("Date", "LabID", "Mode"), sep=c(9,19))
-  
-  #For liver function
-  lf <- read_sas("data/live_caco1.sas7bdat") %>% 
-    filter(Match_Caseset != 387 | Idepic != "22____22304249") %>%
-    select(Idepic, Liver_Function_Score, Liver_Function_Score_C)
+#add LabID as rownames and merge pos and neg biomarkers
+all.samp           <- cbind(LabID = LabIDs$LabID, pos.samp, neg.samp)
+rownames(all.samp) <- NULL
+all.samp           <- as.tibble(all.samp)
+#all.samp2          <- lapply(all.samp, FUN=as.numeric) %>% data.frame
 
-  #For coffee intakes
-  cof <- readRDS("prepdata/Coffee intakes all EPIC.rds")
-  
-  hcc <- hcc %>% left_join(cof, by="Idepic")
-  hcc <- hcc %>% left_join(lf, by="Idepic")
+#Subset subject metadata, liver function data, coffee intakes
+library(haven)
+hcc <- hcc %>% select(Id_Bma, Idepic_Samp:alc_drinker_m) %>%
+  separate("Id_Bma", into = c("Date", "LabID", "Mode"), sep=c(9,19))
 
-  #join coffee biomarker data
-  chcc <- inner_join(hcc, all.samp, by="LabID") %>% select(-Date, -Mode) %>%
-    #rename compound names for easier analysis in STATA and convert to numeric
-  rename(Trigonelline       = `Trigonelline (3-Carboxy-1-methylpyridinium betaine)`,
-         Quinic_acid        = `Quinic acid`, 
-         Hippuric_acid      = `Hippuric acid`, 
-         Cyclo_leu_pro      = `Cyclo(leucyl-prolyl)`,
-         Cyclo_isol_pro     = `Cyclo(isoleucyl-prolyl)`,
-         Cyclo_pro_val      = `Cyclo(prolyl-valyl)`,
-         Cat_sulf           = `Catechol sulfate`,
-         AAMU               = `5-Acetylamino-6-amino-3-methyluracil (AAMU)`) %>% 
-         mutate_at(vars(Trigonelline:AAMU), as.numeric)
+lf <- lf %>% filter(Match_Caseset != 387 | Idepic != "22____22304249") %>%
+  select(Idepic, Liver_Function_Score, Liver_Function_Score_C)
 
-  #Make intensity matrix
-  ints <- chcc %>% select(Trigonelline:AAMU) %>% as.matrix
+#cof <- readRDS("Coffee intakes all EPIC.rds")
 
-  #Convert numeric columns to factor
-  chcc$Smoke_Stat    <- as.factor(chcc$Smoke_Stat)
-  chcc$alc_drinker_m <- as.factor(chcc$alc_drinker_m)
-  chcc$L_School      <- as.factor(chcc$L_School)
-  #chcc$Caselive_Crs  <- as.factor(chcc$Caselive_Crs)
-  
-  return(chcc)
-  #saveRDS(coffee.hcc, "HCC coffee biomarkers and metadata.rds")
-  #write to .dta (Stata)
-  #library(foreign)
-  #write.dta(coffee.hcc, "D://HCC_coffee_metabolites1.dta")
-}
-chcc <- coffee4hcc()
+hcc <- hcc %>% left_join(cof, by="Idepic")
+hcc <- hcc %>% left_join(lf, by="Idepic")
+
+#join coffee biomarker data
+chcc <- inner_join(hcc, all.samp, by="LabID") %>% select(-Date, -Mode) %>%
+  #rename compound names for easier analysis in STATA and convert to numeric
+rename(Trigonelline       = `Trigonelline (3-Carboxy-1-methylpyridinium betaine)`,
+       Quinic_acid        = `Quinic acid`, 
+       Hippuric_acid      = `Hippuric acid`, 
+       Cyclo_leu_pro      = `Cyclo(leucyl-prolyl)`,
+       Cyclo_isol_pro     = `Cyclo(isoleucyl-prolyl)`,
+       Cyclo_pro_val      = `Cyclo(prolyl-valyl)`,
+       Cat_sulf           = `Catechol sulfate`,
+       AAMU               = `5-Acetylamino-6-amino-3-methyluracil (AAMU)`) %>% 
+       mutate_at(vars(Trigonelline:AAMU), as.numeric)
+
+#Make intensity matrix (continuous and categorical)
+ints <- chcc %>% select(Trigonelline:AAMU) %>% as.matrix %>% log2
+cats <- apply(ints, 2, function(x) cut_number(x, n = 4, labels = 1:4))
+
+plot.ts(ints[, 1:6], type = "p")
+plot.ts(ints[, 7:11], type = "p")
+
+#Convert numeric columns to factor
+chcc$Smoke_Stat    <- as.factor(chcc$Smoke_Stat)
+chcc$alc_drinker_m <- as.factor(chcc$alc_drinker_m)
+chcc$L_School      <- as.factor(chcc$L_School)
+#chcc$Caselive_Crs  <- as.factor(chcc$Caselive_Crs)
+
+#saveRDS(coffee.hcc, "HCC coffee biomarkers and metadata.rds")
+#write to .dta (Stata)
+#library(foreign)
+#write.dta(coffee.hcc, "D://HCC_coffee_metabolites1.dta")
 
 # saveRDS(chcc, "HCC coffee biomarkers and metadata.rds")
-chcc <- readRDS("prepdata/HCC coffee biomarkers and metadata.rds")
+# chcc <- readRDS("HCC coffee biomarkers and metadata.rds")
 
 
-# Association HCC coffee ----
+# Association HCC coffee metabolites
+library(Amelia)
+missmap(chcc, rank.order=F)
+table(chcc$Caselive_Crs)
+
+# Conditional logistic model. See email from Magda "metabo" 16-feb-17 for covariates
+base <- Caselive_Crs ~ Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m + L_School + Pa_Mets + 
+  Waist_C + strata(Match_Caseset)
+
+mod1 <- function(x) clogit(Caselive_Crs ~ x + strata(Match_Caseset), data = chcc)
+mod2 <- function(x) clogit(Caselive_Crs ~ x + Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m + 
+    L_School + Pa_Mets + #Waist_C + log2(QGE130301+1) + Liver_Function_Score +
+      strata(Match_Caseset), data = chcc)
+
+# Apply models and tidy (continuous per doubling)
+library(broom)
+fit1 <- apply(ints, 2, mod1) %>% map_df(~ tidy(., exponentiate = T)) %>% 
+  bind_cols(cmpd = colnames(ints))
+fit2 <- apply(ints, 2, mod2) %>% map_df(~ tidy(., exponentiate = T)) %>% 
+  filter(term == "x") %>% bind_cols(cmpd = colnames(ints))
+
+# Bind output for forest plots: raw vs adjusted, adjusted vs adjusted + coffee
+t1 <- bind_rows(fit1, fit2, .id = "Model") %>% arrange(cmpd)
+t1 <- bind_rows(fit1, fit2) #%>% arrange(rowname)
+
+# Apply models and tidy (categorical)
+fit3 <- apply(cats, 2, mod1) %>% map_df(~ tidy(., exponentiate = T)) %>% 
+  bind_cols(cmpd = rep(colnames(ints), each = 3))
+fit4 <- apply(cats, 2, mod2) %>% map_df(~ tidy(., exponentiate = T)) %>% 
+  filter(str_detect(term, "x")) %>% bind_cols(cmpd = rep(colnames(ints), each = 3))
 
 
+# CLR.all <- readRDS("OR_hcc_coffee_metabs.rds")
+
+# Forest plot of data (raw vs adjusted) ----
+rowspace <- rev((1:32)[-seq(3, 32, by = 3)])
+
+#Alternating 18 and 1 point styles
+pointvec <- c(rep(c(18, 1), nrow(t1)/2))
+
+dev.off()
+#par(mfrow=c(1,2))
+# Sets margins (bottom, left, top, right)
+
+library(metafor)
+par(mar=c(4,4,1,2))
+forest(slab = t1$cmpd, ilab = t1$Model, ilab.xpos = -1.5, ilab.pos = 4,
+       x = t1$estimate, ci.ub = t1$conf.high, ci.lb = t1$conf.low, 
+       refline = 1, rows = rowspace, 
+       xlab = "Odds ratio (per doubling biomarker concentration)",
+       ylim = c(1, max(rowspace) + 3), 
+       xlim = c(-4, 6), 
+       pch = pointvec, psize= rep(1.5, nrow(t1)), cex = 0.8)
+
+text(6, max(rowspace) + 2, "OR [95% CI]", cex = 0.8, pos = 2)
+text(c(-4, -1.5), max(rowspace) + 2, c("Compound", "Model"), cex = 0.8, pos=4)
+
+
+
+# Other analyses
+# Association HCC coffee
 # Boxplot cases-controls
 ggplot(chcc, aes(x=as.factor(Caselive_Crs), y=sqrt(QGE130301))) + 
   geom_boxplot(fill = "grey", outlier.colour = "white") + 
@@ -113,109 +169,7 @@ fit <- lm(log(chcc$QGE130301 + 1) ~ chcc$Caselive_Crs)
 
 library(survival)
 cof.CLR <- clogit(Caselive_Crs ~ log2(QGE130301+1) + Bmi_C + Alc_Re + Smoke_Stat + 
-        alc_drinker_m + L_School + Pa_Mets + Waist_C + strata(Match_Caseset), data = chcc)
-
-
-# Association HCC coffee metabolites ----
-# check missings and equal cases and controls
-library(Amelia)
-missmap(chcc, rank.order=F)
-table(chcc$Caselive_Crs)
-
-# Conditional logistic model
-
-# See email from Magda "metabo" 16-feb-17
-# Covariates are Bmi_C, Alc_Re, Smoke_Stat, alc_drinker_m, L_School, Pa_Mets, Waist_C
-# Function to fit a CLR for each metabolite
-
-CLR.coffee <- function(adj = T) {
-  
-  #Models for 10 biomarkers, raw or adjusted model
-  library(survival)
-  fit.CLR <- if(adj == T) { 
-    function(x) {
-            clogit(Caselive_Crs ~ log2(x) + #log2(QGE130301+1) + 
-            Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m + 
-            L_School + Pa_Mets + Waist_C + strata(Match_Caseset), data = chcc)
-            }
-                } else { 
-    function(x) {  
-            clogit(Caselive_Crs ~ log2(x) + strata(Match_Caseset), data = chcc)
-            }
-      }
-
-  #Make intensity matrix
-  library(tidyverse)
-  ints <- chcc %>% select(Trigonelline:AAMU) %>% as.matrix
-  #adjusted or unadjusted models
-  mods <- apply(ints, 2, fit.CLR)
-
-  Pcor  <- unlist(sapply(lpcor, "[", 1))
-
-  #Extract OR and 95% CIs
-  library(broom)
-  modlist <- lapply(mods, tidy)
-  output <- do.call(rbind, modlist) %>% rownames_to_column %>% filter(term == "log2(x)") %>%
-    mutate_at(vars(estimate:conf.high), exp)
-  output <- if(adj == T){ output %>% mutate(model = "Adj. coffee")
-                          } else { 
-                          output %>% mutate(model = "Raw") }
-}
-
-# Instead generate multiple functions for apply
-base <- Caselive_Crs ~ Bmi_C + Alc_Re + Smoke_Stat + alc_drinker_m + L_School + Pa_Mets + 
-  Waist_C + strata(Match_Caseset)
-
-mod1 <- function(x) clogit(Caselive_Crs ~ log2(x) + strata(Match_Caseset), data = chcc)
-mod2 <- function(x) clogit(update(base, .~. + log2(x)), data = chcc)
-mod3 <- function(x) clogit(update(base, .~. + log2(x) + log2(QGE130301+1)), data = chcc)
-mod4 <- function(x) clogit(update(base, .~. + log2(x) + Liver_Function_Score), data = chcc)
-
-#Make intensity matrix
-ints <- chcc %>% select(Trigonelline:AAMU) %>% as.matrix
-fit1 <- apply(ints, 2, mod1)
-fit2 <- apply(ints, 2, mod2)
-fit3 <- apply(ints, 2, mod3)
-fit4 <- apply(ints, 2, mod4)
-
-
-# Raw model, adjusted covariates, covariates + coffee, covariates + liver fn
-CLR.adj <- CLR.coffee(adj = T)
-CLR.raw <- CLR.coffee(adj = F)
-CLR.cof <- CLR.coffee(adj = T)
-CLR.lfn <- CLR.coffee(adj = T)
-
-# Bind output for forest plots: raw vs adjusted, adjusted vs adjusted + coffee
-t1a <- bind_rows(CLR.raw, CLR.adj, .id = "Model") %>% arrange(rowname)
-t1 <- bind_rows(CLR.adj, CLR.cof) %>% arrange(rowname)
-
-# saveRDS(CLR.all, "OR_hcc_coffee_metabs.rds")
-# CLR.all <- readRDS("OR_hcc_coffee_metabs.rds")
-
-# Forest plot of data (raw vs adjusted) ----
-rowspace <- rev((1:32)[-seq(3, 32, by = 3)])
-
-#Alternating 18 and 1 point styles
-pointvec <- c(rep(c(18, 1), nrow(t1)/2))
-
-dev.off()
-# Sets margins (bottom, left, top, right)
-par(mar=c(4,4,1,2))
-
-par(mfrow=c(1,2))
-
-library(metafor)
-forest(slab = t1$rowname, ilab = t1$model, ilab.xpos = -1.5, ilab.pos = 4,
-       x = t1$estimate, ci.ub = t1$conf.high, ci.lb = t1$conf.low, 
-       refline = 1, rows = rowspace, 
-       xlab = "Odds ratio (per doubling biomarker concentration)",
-       ylim = c(1, max(rowspace) + 3), xlim = c(-4, 6), 
-       pch = pointvec, psize= rep(1.5, nrow(t1)), cex = 0.8)
-
-text(6, max(rowspace) + 2, "OR [95% CI]", cex = 0.8, pos = 2)
-text(c(-4, -1.5), max(rowspace) + 2, c("Compound", "Model"), cex = 0.8, pos=4)
-
-# Other analyses ----------------------------------------------------------------------------------------
+                    alc_drinker_m + L_School + Pa_Mets + Waist_C + strata(Match_Caseset), data = chcc)
 
 # Model coffee only
 library(survival)
@@ -242,8 +196,7 @@ summary(fit.CLR)
 
 lapply(mod.list, forest_model, covariates="log2(x)")
 
-# Correlations obesity-coffee biomarkers---------------------------------------------------------
-
+# Correlations obesity-coffee biomarkers
 # Join obesity biomarker data and get correlations with coffee biomarkers/intake
 
 library(haven)
