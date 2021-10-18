@@ -85,3 +85,11 @@ tabcat1 <- results1 %>%
   mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
   mutate(B1 = " (", hyph = "-", B2 = ")") %>%
   unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "")
+
+
+# Correlations all compounds
+colnames(mat) <- cmpds
+cormat <- cor(mat, use = "pairwise.complete.obs", method = "spearman")
+colnames(cormat) <- NULL
+library(corrplot)
+corrplot(cormat, method = "color", order = "hclust")
