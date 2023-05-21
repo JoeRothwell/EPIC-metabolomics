@@ -1,6 +1,8 @@
 # Coffee biomarker data from Profinder for HCC study. Read in data generated from Profinder
 # All samples, blanks and QCs
 library(tidyverse)
+library(haven)
+library(sjmisc)
 
 # Metadata and compound data
 hcc <- read_sas("merged_untarg1.sas7bdat") 
@@ -15,6 +17,9 @@ colnames(pos) <- pos[1, ]
 pos           <- pos[-1, ]
 pos.samp      <- pos[1:258, ]
 
+# With sjmisc (work in progress)
+#pos1 <- rotate_df(pos, cn = T, rn = "samp") %>% filter(str_detect(samp, 'Area'))
+
 neg <- neg %>% select("Compound Name", contains("Area")) %>% t
 colnames(neg) <- neg[1, ]
 neg           <- neg[-1, ]
@@ -25,6 +30,8 @@ sampnames <- rownames(neg)[1:258]
 LabIDs    <- data.frame(ID = sampnames) %>% 
 separate(ID, into = c("other", "other2", "LabID", "No"), sep=c(31,41,51))
 
+#neg1 <- rotate_df(neg, cn = T, rn = "samp") %>% filter(str_detect(samp, 'Area'))
+
 #add LabID as rownames and merge pos and neg biomarkers
 all.samp           <- cbind(LabID = LabIDs$LabID, pos.samp, neg.samp)
 rownames(all.samp) <- NULL
@@ -32,7 +39,6 @@ all.samp           <- as.tibble(all.samp)
 #all.samp2          <- lapply(all.samp, FUN=as.numeric) %>% data.frame
 
 #Subset subject metadata, liver function data, coffee intakes
-library(haven)
 hcc <- hcc %>% select(Id_Bma, Idepic_Samp:alc_drinker_m) %>%
   separate("Id_Bma", into = c("Date", "LabID", "Mode"), sep=c(9,19))
 
