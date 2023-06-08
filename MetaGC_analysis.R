@@ -44,7 +44,9 @@ table(posdat$HPPOS) # 108 controls and 299 cases
 
 # time of blood collection, menopausal status, exogenous hormone use, phase of menstrual cycle
 # Red meat, processed meat, fruits, vegetables: Qge_0701, Qge_0704, Qge_0401, Qge_02
-
+# Dairy products, fish, eggs, fibre: QgE05 + QgE0801 + QgE0901 + QE_FIBT
+# Combined fruits and vegetable variable:
+posdat$fv_total <- posdat$QgE0401 + posdat$QgE02
 
 library(survival)
 clr.raw <- function(x) clogit(Cncr_Caco_Stom.x ~ x + strata(Match_Caseset.x), data = posdat)
@@ -60,9 +62,20 @@ clr.max <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Tot
                                 QgE0701 + QgE0704 + QgE0401 + QgE02 +
                                 strata(Match_Caseset.x), data = posdat)
 
-# Model with h.pylori status
+# Essential + red and processed meat, fruit and vegetables combined, dairy, fish, eggs, fibre
+clr.max <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Total + 
+                                QE_ENERGY + QE_ALC + L_School + Fasting_C +
+                                QgE0701 + QgE0704 + fv_total +
+                                QgE05 + QgE0801 + QgE0901 + QE_FIBT +
+                                strata(Match_Caseset.x), data = posdat)
+
+# Model with h.pylori status. First make "unknown" variable so that no participants missing
+# this variable are excluded from the model
+
+posdat$HPPOS2 <- as_factor(posdat$HPPOS)
+posdat$HPPOS2 <- fct_explicit_na(posdat$HPPOS2)
 clr.hpp <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Total + 
-                                QE_ENERGY + QE_ALC + L_School + Fasting_C + HPPOS +
+                                QE_ENERGY + QE_ALC + L_School + Fasting_C + HPPOS2 +
                                 strata(Match_Caseset.x), data = posdat)
 
 
@@ -80,11 +93,12 @@ posdat <- posdat %>% mutate(across((varlist), as.factor))
 # Run models 
 pos.adj <- apply(posints, 2, clr.adj)
 pos.max <- apply(posints, 2, clr.max) 
-# pos.hpp <- apply(posints, 2, clr.hpp)
+pos.hpp <- apply(posints, 2, clr.hpp)
 
 # Get feature names from data frame label
 # Apply attr() across colnames of posints to get vector of feature names
-features <- sapply(pos[ , 1:dim(posints)[2]], attr, "label") %>% unname
+#features <- sapply(pos[ , 1:dim(posints)[2]], attr, "label") %>% unname
+features <- colnames(posints)
 
 
 # Extract raw and adjusted results to data frame and put together
@@ -94,29 +108,41 @@ library(broom)
 
 res.adj <- map_df(pos.adj, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
-  select(feature, everything(), -term) %>% mutate(feat.no = 1:length(pos.adj))
+  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(pos.adj))
 
 res.max <- map_df(pos.max, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
-  select(feature, everything(), -term)
+  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(pos.adj))
+
+res.hpp <- map_df(pos.hpp, tidy, exponentiate = T, conf.int = T) %>% 
+  filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
+  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(pos.adj))
 
 # Make a copy of the results in case of overwrite
 res.adj.pos <- res.adj
+res.max.pos <- res.max
+res.hpp.pos <- res.hpp
 
 # Format OR and CI
 tab.adj <- res.adj %>%
   mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
   mutate(B1 = " (", hyph = "-", B2 = ")") %>%
-  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "")
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
 
 tab.max <- res.max %>%
   mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
   mutate(B1 = " (", hyph = "-", B2 = ")") %>%
-  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "")
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
+
+tab.hpp <- res.hpp %>%
+  mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
+  mutate(B1 = " (", hyph = "-", B2 = ")") %>%
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
 
 # Get FDR adjustment threshold for plot
 thr.adj <- res.adj %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
 thr.max <- res.max %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
+thr.hpp <- res.hpp %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
 
 # Plots
 # Fully adjusted model
@@ -125,9 +151,9 @@ ggplot(res.adj, aes(x = estimate, y = -log10(p.value))) + geom_point(shape = 1) 
   theme_bw(base_size = 10) +
   xlab("Odds ratio per log increase concentration") + 
   ylab(expression(paste(italic(P), "-value"))) +
-  geom_vline(xintercept = 1, size = 0.2, colour = "grey60") + 
-  geom_hline(yintercept = -log10(thr.adj), size = 0.2, colour = "grey60") +
-  geom_hline(yintercept = 0, size = 0.2, colour = "grey60") +
+  geom_vline(xintercept = 1, linewidth = 0.2, colour = "grey60") + 
+  geom_hline(yintercept = -log10(thr.adj), linewidth = 0.2, colour = "grey60") +
+  geom_hline(yintercept = 0, linewidth = 0.2, colour = "grey60") +
   theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
         axis.title.x = element_text(size = 9)) +
   geom_text_repel(aes(label = feature), size = 3, data = res.adj[res.adj$p.value < thr.adj, ]) 
@@ -137,12 +163,24 @@ ggplot(res.max, aes(x = estimate, y = -log10(p.value))) + geom_point(shape = 1) 
   theme_bw(base_size = 10) +
   xlab("Odds ratio per log increase concentration") + 
   ylab(expression(paste(italic(P), "-value"))) +
-  geom_vline(xintercept = 1, size = 0.2, colour = "grey60") + 
-  geom_hline(yintercept = 0, size = 0.2, colour = "grey60") +
-  geom_hline(yintercept = -log10(thr.max), size = 0.2, colour = "grey60") +
+  geom_vline(xintercept = 1, linewidth = 0.2, colour = "grey60") + 
+  geom_hline(yintercept = 0, linewidth = 0.2, colour = "grey60") +
+  geom_hline(yintercept = -log10(thr.max), linewidth = 0.2, colour = "grey60") +
   theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
         axis.title.x = element_text(size = 9)) +
   geom_text_repel(aes(label = feature), size = 3, data = res.max[res.max$p.value < thr.max, ]) 
+
+# Essential plus H.pylori status adjusted
+ggplot(res.hpp, aes(x = estimate, y = -log10(p.value))) + geom_point(shape = 1) +
+  theme_bw(base_size = 10) +
+  xlab("Odds ratio per log increase concentration") + 
+  ylab(expression(paste(italic(P), "-value"))) +
+  geom_vline(xintercept = 1, linewidth = 0.2, colour = "grey60") + 
+  geom_hline(yintercept = 0, linewidth = 0.2, colour = "grey60") +
+  geom_hline(yintercept = -log10(thr.hpp), linewidth = 0.2, colour = "grey60") +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
+        axis.title.x = element_text(size = 9)) +
+  geom_text_repel(aes(label = feature), size = 3, data = res.hpp[res.hpp$p.value < thr.hpp, ]) 
 
 
 # Negative mode----
@@ -159,6 +197,8 @@ dim(negints) # 1130 features
 library(survival)
 #clr.raw <- function(x) clogit(Cncr_Caco_Stom.x ~ x + strata(Match_Caseset.x), data = negdat)
 
+negdat$fv_total <- negdat$QgE0401 + negdat$QgE02
+
 # Model with essential covariates
 clr.adj <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Total + 
                                 QE_ENERGY + QE_ALC + L_School + Fasting_C + 
@@ -170,9 +210,19 @@ clr.max <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Tot
                                 QgE0701 + QgE0704 + QgE0401 + QgE02 +
                                 strata(Match_Caseset.x), data = negdat)
 
+# Essential + red and processed meat, fruit and vegetables combined, dairy, fish, eggs, fibre
+clr.max <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Total + 
+                                QE_ENERGY + QE_ALC + L_School + Fasting_C +
+                                QgE0701 + QgE0704 + fv_total +
+                                QgE05 + QgE0801 + QgE0901 + QE_FIBT +
+                                strata(Match_Caseset.x), data = negdat)
+
 # Model with h.pylori status
+negdat$HPPOS2 <- as_factor(negdat$HPPOS)
+negdat$HPPOS2 <- fct_explicit_na(negdat$HPPOS2)
+
 clr.hpp <- function(x) clogit(Cncr_Caco_Stom.x ~ x + Bmi_C + Smoke_Stat + Pa_Total + 
-                                QE_ENERGY + QE_ALC + L_School + Fasting_C + HPPOS +
+                                QE_ENERGY + QE_ALC + L_School + Fasting_C + HPPOS2 +
                                 strata(Match_Caseset.x), data = negdat)
 
 # Small number of missing values in QE_ENERGY (4), QE_ALC (4), L_School (11), Fasting_C (8)
@@ -185,23 +235,27 @@ negdat <- negdat %>% mutate(across((varlist), as.factor))
 # Run models 
 neg.adj <- apply(negints, 2, clr.adj)
 neg.max <- apply(negints, 2, clr.max) 
-# pos.hpp <- apply(posints, 2, clr.hpp)
+neg.hpp <- apply(negints, 2, clr.hpp)
 
 # Get feature names from data frame label
 # Apply attr() across colnames of posints to get vector of feature names
 features <- sapply(neg[ , 1:dim(negints)[2]], attr, "label") %>% unname
-
+features <- colnames(negints)
 
 # Extract raw and adjusted results to data frame and put together
 library(broom)
 #res.raw <- map_df(neg.raw, tidy, exponentiate = T, conf.int = T) %>% 
 #  mutate(p.adj = p.adjust(p.value, method = "fdr"))
 
-res.adj.neg <- map_df(neg.adj, tidy, exponentiate = T, conf.int = T) %>% 
+res.adj <- map_df(neg.adj, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
-  select(feature, everything(), -term) %>% mutate(feat.no = 1:length(neg.adj))
+  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(neg.adj))
 
 res.max <- map_df(neg.max, tidy, exponentiate = T, conf.int = T) %>% 
+  filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
+  select(feature, everything(), -term)
+
+res.hpp <- map_df(neg.hpp, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
   select(feature, everything(), -term)
 
@@ -213,16 +267,22 @@ res.adj.neg <- res.adj
 tab.adj <- res.adj %>%
   mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
   mutate(B1 = " (", hyph = "-", B2 = ")") %>%
-  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "")
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
 
 tab.max <- res.max %>%
   mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
   mutate(B1 = " (", hyph = "-", B2 = ")") %>%
-  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "")
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
+
+tab.hpp <- res.hpp %>%
+  mutate_at(vars(estimate:conf.high), ~ format(round(., digits = 2), nsmall = 2)) %>% 
+  mutate(B1 = " (", hyph = "-", B2 = ")") %>%
+  unite("OR", estimate, B1, conf.low, hyph, conf.high, B2, sep = "") %>% filter(p.adj < 0.05)
 
 # Get FDR adjustment threshold for plot
 thr.adj <- res.adj %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
 thr.max <- res.max %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
+thr.hpp <- res.hpp %>% filter(p.adj < 0.05) %>% pull(p.value) %>% max
 
 # Plots
 # Fully adjusted model
@@ -249,6 +309,18 @@ ggplot(res.max, aes(x = estimate, y = -log10(p.value))) + geom_point(shape = 1) 
   theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
         axis.title.x = element_text(size = 9)) +
   geom_text_repel(aes(label = feature), size = 3, data = res.max[res.max$p.value < thr.max, ]) 
+
+# Fully adjusted model + others
+ggplot(res.hpp, aes(x = estimate, y = -log10(p.value))) + geom_point(shape = 1) +
+  theme_bw(base_size = 10) +
+  xlab("Odds ratio per log increase concentration") + 
+  ylab(expression(paste(italic(P), "-value"))) +
+  geom_vline(xintercept = 1, size = 0.2, colour = "grey60") + 
+  geom_hline(yintercept = 0, size = 0.2, colour = "grey60") +
+  geom_hline(yintercept = -log10(thr.hpp), size = 0.2, colour = "grey60") +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
+        axis.title.x = element_text(size = 9)) +
+  geom_text_repel(aes(label = feature), size = 3, data = res.hpp[res.hpp$p.value < thr.hpp, ])
 
 
 # Correlations----
