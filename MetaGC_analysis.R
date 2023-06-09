@@ -108,7 +108,7 @@ library(broom)
 
 res.adj <- map_df(pos.adj, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
-  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(pos.adj))
+  select(feature, everything(), -term) %>% mutate(feat.no = 1:length(pos.adj))
 
 res.max <- map_df(pos.max, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
@@ -249,7 +249,7 @@ library(broom)
 
 res.adj <- map_df(neg.adj, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
-  select(feature, everything(), -term) #%>% mutate(feat.no = 1:length(neg.adj))
+  select(feature, everything(), -term) %>% mutate(feat.no = 1:length(neg.adj))
 
 res.max <- map_df(neg.max, tidy, exponentiate = T, conf.int = T) %>% 
   filter(term == "x") %>% mutate(p.adj = p.adjust(p.value, method = "fdr"), feature = features) %>%
@@ -344,3 +344,9 @@ cormat <- cor(logmat, method = "pearson")
 colnames(cormat) <- sigfeatnames
 rownames(cormat) <- sigfeatnames
 corrplot(cormat, method = "square", order = "hclust", tl.col = "black")
+
+# Get cluster order (assign corrplot to corp first)
+clust.ord <- unique(corp$corrPos$xName)
+cormat1 <- cormat[clust.ord, clust.ord]
+
+write.csv(cormat1, "metabolite correlations MetaGC.csv")
