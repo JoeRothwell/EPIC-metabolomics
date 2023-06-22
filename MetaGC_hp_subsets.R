@@ -4,6 +4,7 @@ pos <- read.csv("metabolomics_pos.csv")
 neg <- read.csv("metabolomics_neg.csv")
 
 # Join participant data to metabolomics data
+library(tidyverse)
 posdat <- right_join(dat, pos, by = "Idepic")
 
 posdat %>% group_by(Match_Caseset.x) %>% filter(any(HPPOS == 1)) %>% n()
