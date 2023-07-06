@@ -25,8 +25,8 @@ table(discordant$HPPOS, discordant$Cncr_Caco_Stom.x) # 67 and 17 of each discord
 discordant <- discordant %>% mutate(disc.type = ifelse(HPPOS == 1 & Cncr_Caco_Stom.x == 1, 1, 0))
 
 # Get discordance types
-discordant10 <- discordant.all %>% group_by(Match_Caseset.x) %>% filter(sum(disc.type) == 1) %>% ungroup() # 134/2 = 67
-discordant01 <- discordant.all %>% group_by(Match_Caseset.x) %>% filter(sum(disc.type) == 0) %>% ungroup() # 34/2 = 17
+discordant10 <- discordant %>% group_by(Match_Caseset.x) %>% filter(sum(disc.type) == 1) %>% ungroup() # 134/2 = 67
+discordant01 <- discordant %>% group_by(Match_Caseset.x) %>% filter(sum(disc.type) == 0) %>% ungroup() # 34/2 = 17
 
 
 # Identify CC pairs with at least one missing
